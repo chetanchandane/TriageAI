@@ -2,6 +2,7 @@
 
 An autonomous, multi-agent AI system designed to transform free-text patient messages into structured clinical actions. This project serves as a Master’s Capstone at the Rochester Institute of Technology (RIT).
 
+![TriageAI System Architecture](./assets/triage_ai.png)
 ## 🚀 Overview
 Traditional patient portals often lead to administrative bottlenecks. This system utilizes **Agentic AI** to:
 - **Triage:** Categorize intent and urgency (Normal to Emergency).
