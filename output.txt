@@ -1,0 +1,19 @@
+--- Testing Emergency Case ---
+{
+  "intent": "Emergency Medical Concern",
+  "confidence": 1.0,
+  "urgency": "EMERGENCY",
+  "summary": "The patient is experiencing sharp chest pain radiating to the arm for the last 10 minutes.",
+  "checklist": [],
+  "recommended_queue": "Emergency Services"
+}
+
+--- Testing Administrative Case ---
+{
+  "intent": "Refill",
+  "confidence": 1.0,
+  "urgency": "LOW",
+  "summary": "The patient is requesting a refill for their Lisinopril prescription.",
+  "checklist": [],
+  "recommended_queue": "Nursing"
+}
