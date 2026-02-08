@@ -3,10 +3,12 @@ from dotenv import load_dotenv
 from pydantic import TypeAdapter
 from google import genai
 from schemas import TriageResult
+from langsmith import traceable
 
 load_dotenv()
 client = genai.Client(api_key=os.environ.get("LLM_GEMINI_API_KEY"))
 
+@traceable
 def test_triage(patient_message: str):
     '''
     Test the triage function with a patient message.

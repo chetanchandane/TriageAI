@@ -1,2 +1,11 @@
 .env
 myenv/
+
+
+.cursor/
+**/.cursor/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
