@@ -69,8 +69,9 @@ def save_message(
                 "content": content,
                 "triage_result": triage_result or {},
             }).execute()
-        except Exception:
+        except Exception as e:
             # Fallback to demo store if table doesn't exist yet
+            print(f"[messages_store] Supabase insert failed, using in-memory fallback: {e}")
             _demo_messages.append({
                 "user_id": user_id,
                 "patient_id": patient_id,

@@ -53,6 +53,21 @@ def render_login_register():
     st.title("🏥 TriageAI Patient Portal")
     if not is_supabase_configured():
         st.info("Running in **demo mode** (no Supabase). Data is in-memory only.")
+    else:
+        if st.button("Restore my session", key="restore_session"):
+            user = get_current_user()
+            if user:
+                set_patient_context(
+                    st.session_state,
+                    user_id=user["user_id"],
+                    patient_id=user["patient_id"],
+                    full_name=user["full_name"],
+                    email=user["email"],
+                )
+                st.session_state.user_id = user["user_id"]
+                st.rerun()
+            else:
+                st.caption("No existing session found. Log in or register below.")
     tab1, tab2 = st.tabs(["Log in", "Register"])
     with tab1:
         with st.form("login_form"):
@@ -113,7 +128,6 @@ def render_patient_portal():
                     safety_result_dict, triage_result = _run_workflow(msg)
                 except Exception as e:
                     st.error(f"Workflow failed: {e}")
-                    st.rerun()
                     return
                 safety_flagged = safety_result_dict.get("is_potential_emergency", False)
                 if safety_flagged:
@@ -185,18 +199,7 @@ def render_staff_view():
 
 
 def main():
-    # Restore session from auth (Supabase) if needed
-    if st.session_state.patient is None and is_supabase_configured():
-        user = get_current_user()
-        if user:
-            set_patient_context(
-                st.session_state,
-                user_id=user["user_id"],
-                patient_id=user["patient_id"],
-                full_name=user["full_name"],
-                email=user["email"],
-            )
-            st.session_state.user_id = user["user_id"]
+    # No automatic session restore: Supabase is never touched at startup, so a paused/slow project won't hang the app.
 
     patient = get_patient_context(st.session_state)
     if patient is None:

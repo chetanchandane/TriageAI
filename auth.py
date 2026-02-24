@@ -34,8 +34,8 @@ def _get_supabase():
 
 
 def is_supabase_configured() -> bool:
-    """True only when Supabase env is set and the supabase package is available."""
-    return _get_supabase() is not None
+    """True when Supabase env vars are set. Does not import supabase (fast startup)."""
+    return bool(_SUPABASE_URL and _SUPABASE_ANON_KEY)
 
 
 def get_supabase_client():
@@ -164,31 +164,42 @@ def _supabase_login(email: str, password: str) -> tuple[Optional[str], Optional[
 
 
 def _supabase_get_user() -> Optional[dict]:
-    sb = _get_supabase()
-    if not sb:
-        return None
-    try:
-        res = sb.auth.get_user()
-        user = res.user if hasattr(res, "user") else None
-        if not user:
+    """Get current Supabase user with a short timeout so a paused/slow project doesn't hang the app."""
+    from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
+
+    def _fetch():
+        sb = _get_supabase()
+        if not sb:
             return None
-        user_id = user.id
-        full_name = (user.user_metadata or {}).get("full_name") or user.email or "Patient"
-        patient_id = _make_patient_id(user_id)
         try:
-            row = sb.table("profiles").select("full_name, patient_id").eq("id", user_id).limit(1).execute()
-            if row.data and len(row.data) > 0:
-                full_name = row.data[0].get("full_name") or full_name
-                patient_id = row.data[0].get("patient_id") or patient_id
+            res = sb.auth.get_user()
+            user = res.user if hasattr(res, "user") else None
+            if not user:
+                return None
+            user_id = user.id
+            full_name = (user.user_metadata or {}).get("full_name") or user.email or "Patient"
+            patient_id = _make_patient_id(user_id)
+            try:
+                row = sb.table("profiles").select("full_name, patient_id").eq("id", user_id).limit(1).execute()
+                if row.data and len(row.data) > 0:
+                    full_name = row.data[0].get("full_name") or full_name
+                    patient_id = row.data[0].get("patient_id") or patient_id
+            except Exception:
+                pass
+            return {
+                "user_id": user_id,
+                "email": user.email,
+                "full_name": full_name,
+                "patient_id": patient_id,
+            }
         except Exception:
-            pass
-        return {
-            "user_id": user_id,
-            "email": user.email,
-            "full_name": full_name,
-            "patient_id": patient_id,
-        }
-    except Exception:
+            return None
+
+    try:
+        with ThreadPoolExecutor(max_workers=1) as ex:
+            f = ex.submit(_fetch)
+            return f.result(timeout=8)  # don't hang if Supabase is paused or slow
+    except (FuturesTimeout, Exception):
         return None
 
 

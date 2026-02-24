@@ -30,8 +30,7 @@ def _get_collection():
         return _collection
     try:
         import chromadb
-        from chromadb.config import Settings
-        client = chromadb.Client(Settings(anonymized_telemetry=False))
+        client = chromadb.EphemeralClient()
         coll = client.get_or_create_collection("policy", metadata={"description": "Clinic policy snippets"})
         # Add default docs if empty
         if coll.count() == 0:

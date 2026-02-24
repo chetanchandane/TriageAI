@@ -34,5 +34,4 @@ def set_patient_context(state, user_id: str, patient_id: str, full_name: str, em
 
 def clear_patient_context(state) -> None:
     """Clear patient context on logout."""
-    if hasattr(state, "patient"):
-        del state.patient
+    state.patient = None
