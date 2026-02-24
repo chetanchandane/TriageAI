@@ -51,9 +51,16 @@ See also: `DEVELOPMENT.md` (decision log, phases), `ERRORS.md` (errors and resol
 ## 🏃 Run the app
 
 ```bash
+# Install dependencies (use the same env you'll run with)
 pip install -r requirements.txt
 cp .env.example .env   # then set LLM_GEMINI_API_KEY (required)
+
+# Option A: if you use a venv (e.g. myenv), activate it then run
+source myenv/bin/activate   # macOS/Linux
 streamlit run streamlit_app.py
+
+# Option B: use the run script (picks myenv if present)
+chmod +x run_app.sh && ./run_app.sh
 ```
 
 - **Without Supabase (demo):** Use `.env` with `LLM_GEMINI_API_KEY` only. Auth and messages are in-memory; data is lost on restart.

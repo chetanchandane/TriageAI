@@ -11,6 +11,33 @@ from messages_store import save_message, get_all_messages_for_staff, get_message
 
 load_dotenv()
 
+# Optional: workflow and policy (lazy import so app starts without langgraph/chromadb)
+def _run_workflow(msg: str):
+    try:
+        from workflow import run_triage_workflow
+        return run_triage_workflow(msg)
+    except ImportError:
+        from safety_agent import screen_for_emergency
+        from triage_test import test_triage
+        safety_result = screen_for_emergency(msg)
+        safety_dict = safety_result.model_dump()
+        triage = test_triage(msg)
+        triage_result = triage.model_dump() if triage else {}
+        if safety_result.is_potential_emergency:
+            triage_result["urgency"] = "EMERGENCY"
+            triage_result["safety_flagged"] = True
+            triage_result["safety_reason"] = safety_result.reason
+            triage_result["safety_triggered_by"] = safety_result.triggered_by
+        return safety_dict, triage_result
+
+
+def _policy_available():
+    try:
+        from policy_agent import get_relevant_policy, generate_draft_reply, generate_next_steps
+        return get_relevant_policy, generate_draft_reply, generate_next_steps
+    except ImportError:
+        return None
+
 # Page config
 st.set_page_config(page_title="TriageAI Patient Portal", page_icon="🏥", layout="centered")
 
@@ -19,17 +46,6 @@ if "patient" not in st.session_state:
     st.session_state.patient = None
 if "user_id" not in st.session_state:
     st.session_state.user_id = None
-
-
-def run_triage(patient_message: str):
-    """Run triage on message; returns TriageResult as dict or None on failure."""
-    try:
-        from triage_test import test_triage
-        result = test_triage(patient_message)
-        return result.model_dump() if result else None
-    except Exception as e:
-        st.error(f"Triage failed: {e}")
-        return None
 
 
 def render_login_register():
@@ -91,13 +107,23 @@ def render_patient_portal():
             if not (content or "").strip():
                 st.error("Please enter a message.")
             else:
-                triage_result = run_triage(content.strip())
+                msg = content.strip()
+                # LangGraph workflow: Safety → Triage
+                try:
+                    safety_result_dict, triage_result = _run_workflow(msg)
+                except Exception as e:
+                    st.error(f"Workflow failed: {e}")
+                    st.rerun()
+                    return
+                safety_flagged = safety_result_dict.get("is_potential_emergency", False)
+                if safety_flagged:
+                    st.warning("⚠️ **Safety screen:** This message was flagged as a potential emergency. Staff will prioritize it. If this is a life-threatening emergency, please call 911 or go to the nearest ER.")
                 save_message(
                     user_id=patient.user_id,
                     patient_id=patient.patient_id,
                     full_name=patient.full_name,
                     email=patient.email,
-                    content=content.strip(),
+                    content=msg,
                     triage_result=triage_result,
                 )
                 st.success("Message submitted. Staff will review it.")
@@ -120,31 +146,41 @@ def render_patient_portal():
 
 
 def render_staff_view():
-    """What staff sees: all messages grouped by patient."""
+    """What staff sees: all messages in order of urgency (EMERGENCY first), then by time."""
     messages = get_all_messages_for_staff()
     if not messages:
         st.caption("No messages yet.")
         return
 
-    # Group by patient
-    by_patient: dict[str, list] = {}
+    st.caption("Messages ordered by urgency (highest first), then by time. Set SUPABASE_SERVICE_ROLE_KEY in .env to see all patients.")
     for m in messages:
-        key = f"{m.get('patient_id', '')}|{m.get('full_name', '')}|{m.get('email', '')}"
-        if key not in by_patient:
-            by_patient[key] = []
-        by_patient[key].append(m)
-
-    for key, msgs in by_patient.items():
-        parts = key.split("|", 2)
-        patient_id = parts[0] or "—"
-        full_name = parts[1] if len(parts) > 1 else "—"
-        email = parts[2] if len(parts) > 2 else "—"
-        st.markdown(f"**{full_name}** · `{patient_id}` · {email}")
-        for m in msgs:
-            st.markdown(f"- *{m.get('created_at', '')[:19]}* — {m.get('content', '')}")
-            if m.get("triage_result"):
-                tr = m["triage_result"]
-                st.caption(f"  Urgency: {tr.get('urgency')} · {tr.get('recommended_queue')} · {tr.get('summary')}")
+        tr = m.get("triage_result") or {}
+        urgency = tr.get("urgency", "N/A")
+        full_name = m.get("full_name") or "—"
+        patient_id = m.get("patient_id") or "—"
+        email = m.get("email") or "—"
+        with st.container():
+            st.markdown(f"**{urgency}** · **{full_name}** · `{patient_id}` · {email}")
+            st.markdown(f"*{m.get('created_at', '')[:19]}* — {m.get('content', '')}")
+            cap = f"Queue: {tr.get('recommended_queue')} · {tr.get('summary')}"
+            if tr.get("safety_flagged"):
+                cap += " · ⚠️ **Safety flagged:** " + (tr.get("safety_reason") or "potential emergency")
+            st.caption(cap)
+            policy_fns = _policy_available()
+            if policy_fns:
+                get_relevant_policy, generate_draft_reply, generate_next_steps = policy_fns
+                with st.expander("Policy: draft reply & next steps"):
+                    policy_chunks = get_relevant_policy(m.get("content", ""), tr.get("summary", ""))
+                    draft = generate_draft_reply(m.get("content", ""), tr, policy_chunks)
+                    steps = generate_next_steps(m.get("content", ""), tr, policy_chunks)
+                    st.markdown("**Draft reply:**")
+                    st.text(draft)
+                    st.markdown("**Suggested next steps:**")
+                    for s in steps:
+                        st.markdown(f"- {s}")
+            else:
+                with st.expander("Policy: draft reply & next steps"):
+                    st.caption("Install `chromadb` and run `pip install -r requirements.txt` for policy-based draft replies.")
         st.divider()
 
 
