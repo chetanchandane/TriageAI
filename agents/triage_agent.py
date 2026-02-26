@@ -1,10 +1,15 @@
+"""
+Triage Agent: classify patient messages by intent, urgency, and recommended queue.
+Uses Gemini for structured JSON output with Pydantic validation.
+"""
 import os
 from dotenv import load_dotenv
 from google import genai
-from schemas import TriageResult
+from schemas.schemas import TriageResult
 from langsmith import traceable
 
 load_dotenv()
+
 
 @traceable
 def test_triage(patient_message: str):
@@ -31,12 +36,12 @@ def test_triage(patient_message: str):
 
     # We use 'response.parsed' to get the Pydantic object directly
     response = client.models.generate_content(
-        model="gemini-2.5-flash", 
+        model="gemini-2.5-flash",
         contents=patient_message,
         config={
             "system_instruction": PROMPT,
             "response_mime_type": "application/json",
-            "response_schema": TriageResult, 
+            "response_schema": TriageResult,
         }
     )
 

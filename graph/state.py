@@ -1,9 +1,16 @@
 """
-Session state for TriageAI app.
-Tracks authenticated user and current patient context for personalized messages.
+State definitions for TriageAI.
+- TriageWorkflowState: TypedDict used by LangGraph workflow.
+- PatientContext: dataclass for the logged-in patient's session info.
 """
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional, TypedDict
+
+
+class TriageWorkflowState(TypedDict, total=False):
+    message: str
+    safety_result: dict[str, Any]
+    triage_result: dict[str, Any]
 
 
 @dataclass

@@ -1,5 +1,5 @@
 .env
-myenv/
+myenv.nosync/
 
 
 .cursor/
@@ -11,3 +11,4 @@ __pycache__/
 *.pyo
 
 report
+instructions

@@ -10,7 +10,7 @@ from typing import Optional
 from dotenv import load_dotenv
 from langsmith import traceable
 
-from schemas import SafetyResult
+from schemas.schemas import SafetyResult
 
 load_dotenv()
 

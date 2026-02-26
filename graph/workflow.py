@@ -1,60 +1,31 @@
 """
-LangGraph workflow: Safety Agent → Triage Agent.
+LangGraph workflow: Safety Agent -> Triage Agent.
 Run with run_triage_workflow(patient_message) to get safety_result + triage_result.
-Falls back to direct Safety → Triage calls if LangGraph is not installed.
+Falls back to direct Safety -> Triage calls if LangGraph is not installed.
 """
-from typing import TypedDict, Any
+from typing import Any
 
-from safety_agent import screen_for_emergency
-
-
-class TriageWorkflowState(TypedDict, total=False):
-    message: str
-    safety_result: dict[str, Any]
-    triage_result: dict[str, Any]
-
-
-def _safety_node(state: TriageWorkflowState) -> dict[str, Any]:
-    """Run safety screen; return state update."""
-    msg = (state.get("message") or "").strip()
-    result = screen_for_emergency(msg)
-    return {"safety_result": result.model_dump()}
-
-
-def _triage_node(state: TriageWorkflowState) -> dict[str, Any]:
-    """Run triage; if safety flagged emergency, override urgency."""
-    msg = (state.get("message") or "").strip()
-    try:
-        from triage_test import test_triage
-        triage = test_triage(msg)
-        out = triage.model_dump() if triage else {}
-    except Exception:
-        out = {}
-    safety = state.get("safety_result") or {}
-    if safety.get("is_potential_emergency"):
-        out["urgency"] = "EMERGENCY"
-        out["safety_flagged"] = True
-        out["safety_reason"] = safety.get("reason", "")
-        out["safety_triggered_by"] = safety.get("triggered_by", "none")
-    return {"triage_result": out}
+from graph.state import TriageWorkflowState
+from graph.nodes import safety_node, triage_node
 
 
 def _run_fallback(patient_message: str) -> tuple[dict[str, Any], dict[str, Any]]:
     """No LangGraph: run safety then triage directly."""
     msg = (patient_message or "").strip()
+    from agents.safety_agent import screen_for_emergency
     safety_result = screen_for_emergency(msg).model_dump()
     state: TriageWorkflowState = {"message": msg, "safety_result": safety_result}
-    triage_update = _triage_node(state)
+    triage_update = triage_node(state)
     return safety_result, triage_update.get("triage_result", {})
 
 
 def build_graph():
-    """Build and compile the Safety → Triage graph."""
+    """Build and compile the Safety -> Triage graph."""
     from langgraph.graph import StateGraph
 
     graph = StateGraph(TriageWorkflowState)
-    graph.add_node("safety", _safety_node)
-    graph.add_node("triage", _triage_node)
+    graph.add_node("safety", safety_node)
+    graph.add_node("triage", triage_node)
     graph.set_entry_point("safety")
     graph.add_edge("safety", "triage")
     graph.set_finish_point("triage")

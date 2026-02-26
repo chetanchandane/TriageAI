@@ -2,23 +2,35 @@
 TriageAI Streamlit app: login/register, patient portal, and staff view.
 Messages are tied to patient identity (patient_id, full_name) for personalization and staff identification.
 """
+import os
+import sys
+
+# Ensure the project root is on sys.path so all package imports resolve correctly.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import streamlit as st
 from dotenv import load_dotenv
 
-from auth import register, login, get_current_user, is_supabase_configured
-from state import get_patient_context, set_patient_context, clear_patient_context
-from messages_store import save_message, get_all_messages_for_staff, get_messages_for_patient
+from app.auth import register, login, get_current_user, is_supabase_configured
+from graph.state import get_patient_context, set_patient_context, clear_patient_context
+from app.messages_store import (
+    save_message,
+    get_all_messages_for_staff,
+    get_messages_for_patient,
+    update_message_triage_result,
+)
+from mcp.tools.communication import send_resolution_email
 
 load_dotenv()
 
 # Optional: workflow and policy (lazy import so app starts without langgraph/chromadb)
 def _run_workflow(msg: str):
     try:
-        from workflow import run_triage_workflow
+        from graph.workflow import run_triage_workflow
         return run_triage_workflow(msg)
     except ImportError:
-        from safety_agent import screen_for_emergency
-        from triage_test import test_triage
+        from agents.safety_agent import screen_for_emergency
+        from agents.triage_agent import test_triage
         safety_result = screen_for_emergency(msg)
         safety_dict = safety_result.model_dump()
         triage = test_triage(msg)
@@ -33,7 +45,7 @@ def _run_workflow(msg: str):
 
 def _policy_available():
     try:
-        from policy_agent import get_relevant_policy, generate_draft_reply, generate_next_steps
+        from agents.policy_agent import get_relevant_policy, generate_draft_reply, generate_next_steps
         return get_relevant_policy, generate_draft_reply, generate_next_steps
     except ImportError:
         return None
@@ -46,6 +58,8 @@ if "patient" not in st.session_state:
     st.session_state.patient = None
 if "user_id" not in st.session_state:
     st.session_state.user_id = None
+if "selected_message_id" not in st.session_state:
+    st.session_state.selected_message_id = None
 
 
 def render_login_register():
@@ -123,7 +137,7 @@ def render_patient_portal():
                 st.error("Please enter a message.")
             else:
                 msg = content.strip()
-                # LangGraph workflow: Safety → Triage
+                # LangGraph workflow: Safety -> Triage
                 try:
                     safety_result_dict, triage_result = _run_workflow(msg)
                 except Exception as e:
@@ -159,43 +173,126 @@ def render_patient_portal():
                 st.divider()
 
 
+def _urgency_emoji(urgency: str) -> str:
+    u = (urgency or "").upper()
+    if u == "EMERGENCY":
+        return "🔴"
+    if u == "HIGH":
+        return "🟠"
+    if u == "LOW":
+        return "🟢"
+    return "🟡"  # NORMAL or default
+
+
 def render_staff_view():
-    """What staff sees: all messages in order of urgency (EMERGENCY first), then by time."""
-    messages = get_all_messages_for_staff()
+    """Staff view: two-pane dashboard (active queue left, detail view right)."""
+    messages = get_all_messages_for_staff(active_only=True)
     if not messages:
-        st.caption("No messages yet.")
+        st.caption("No active messages. Resolved/routed messages are hidden from the queue.")
         return
 
-    st.caption("Messages ordered by urgency (highest first), then by time. Set SUPABASE_SERVICE_ROLE_KEY in .env to see all patients.")
-    for m in messages:
-        tr = m.get("triage_result") or {}
-        urgency = tr.get("urgency", "N/A")
-        full_name = m.get("full_name") or "—"
-        patient_id = m.get("patient_id") or "—"
-        email = m.get("email") or "—"
-        with st.container():
-            st.markdown(f"**{urgency}** · **{full_name}** · `{patient_id}` · {email}")
-            st.markdown(f"*{m.get('created_at', '')[:19]}* — {m.get('content', '')}")
-            cap = f"Queue: {tr.get('recommended_queue')} · {tr.get('summary')}"
+    # Default to first (highest urgency) message if none selected
+    if st.session_state.selected_message_id is None:
+        st.session_state.selected_message_id = messages[0].get("id")
+    selected_id = st.session_state.selected_message_id
+    selected = next((m for m in messages if m.get("id") == selected_id), None)
+    if not selected and messages:
+        selected = messages[0]
+        st.session_state.selected_message_id = selected.get("id")
+
+    st.caption("Active queue (resolved/routed messages are hidden). Set SUPABASE_SERVICE_ROLE_KEY in .env to see all patients.")
+    col_left, col_right = st.columns([4, 8])
+
+    with col_left:
+        st.markdown("#### 📋 Active queue")
+        for m in messages:
+            tr = m.get("triage_result") or {}
+            urgency = tr.get("urgency", "N/A")
+            emoji = _urgency_emoji(urgency)
+            full_name = m.get("full_name") or "—"
+            content_snippet = (m.get("content") or "")[:80]
+            if len(m.get("content") or "") > 80:
+                content_snippet += "…"
+            ts = (m.get("created_at") or "")[:19]
+            is_selected = m.get("id") == selected_id
+            with st.container(border=True):
+                st.markdown(f"{emoji} **{urgency}** · **{full_name}**")
+                st.caption(content_snippet)
+                st.caption(ts)
+                if st.button("View", key=f"view_{m.get('id')}", use_container_width=True):
+                    st.session_state.selected_message_id = m.get("id")
+                    st.rerun()
+
+    with col_right:
+        st.markdown("#### 📄 Detail view")
+        if not selected:
+            st.info("Select a message from the queue.")
+            return
+
+        tr = selected.get("triage_result") or {}
+        full_name = selected.get("full_name") or "—"
+        email = selected.get("email") or "—"
+        patient_id = selected.get("patient_id") or "—"
+        content = selected.get("content") or ""
+
+        st.markdown(f"**{full_name}** · {email} · `{patient_id}`")
+        st.markdown("---")
+        st.markdown("**Message**")
+        st.text_area("Content", value=content, height=120, disabled=True, key="detail_content")
+        st.markdown("**AI analysis**")
+        with st.container(border=True):
+            st.markdown(f"**Intent / summary:** {tr.get('summary') or tr.get('intent') or '—'}")
+            st.markdown(f"**Urgency:** {_urgency_emoji(tr.get('urgency',''))} {tr.get('urgency', 'N/A')}")
+            st.markdown(f"**Recommended queue:** {tr.get('recommended_queue', '—')}")
             if tr.get("safety_flagged"):
-                cap += " · ⚠️ **Safety flagged:** " + (tr.get("safety_reason") or "potential emergency")
-            st.caption(cap)
-            policy_fns = _policy_available()
-            if policy_fns:
-                get_relevant_policy, generate_draft_reply, generate_next_steps = policy_fns
-                with st.expander("Policy: draft reply & next steps"):
-                    policy_chunks = get_relevant_policy(m.get("content", ""), tr.get("summary", ""))
-                    draft = generate_draft_reply(m.get("content", ""), tr, policy_chunks)
-                    steps = generate_next_steps(m.get("content", ""), tr, policy_chunks)
-                    st.markdown("**Draft reply:**")
-                    st.text(draft)
-                    st.markdown("**Suggested next steps:**")
-                    for s in steps:
-                        st.markdown(f"- {s}")
-            else:
-                with st.expander("Policy: draft reply & next steps"):
-                    st.caption("Install `chromadb` and run `pip install -r requirements.txt` for policy-based draft replies.")
-        st.divider()
+                st.warning(f"⚠️ **Safety flagged:** {tr.get('safety_reason') or 'Potential emergency'}")
+        st.markdown("**Patient history**")
+        history = get_messages_for_patient(selected.get("user_id", ""))
+        with st.expander(f"Past messages ({len(history)})", expanded=False):
+            if not history:
+                st.caption("No other messages.")
+            for h in history:
+                if h.get("id") == selected.get("id"):
+                    continue
+                st.caption(f"*{(h.get('created_at') or '')[:19]}* — {(h.get('content') or '')[:100]}…")
+                st.divider()
+
+        # Action buttons
+        btn_col1, btn_col2, btn_col3 = st.columns(3)
+        with btn_col1:
+            if st.button("Approve & Route to ER", type="primary", key="approve_route_er"):
+                new_tr = {**(tr or {}), "status": "Resolved/Routed"}
+                if update_message_triage_result(selected.get("id"), new_tr):
+                    body = "Your case has been reviewed. Please proceed to the ER as directed by staff."
+                    send_resolution_email(email, "Urgent: Proceed to ER", body)
+                    st.success("Message resolved and patient emailed!")
+                    st.session_state.selected_message_id = None
+                    st.rerun()
+                else:
+                    st.error("Failed to update message.")
+        with btn_col2:
+            if st.button("Edit draft reply", key="edit_draft"):
+                st.info("Edit draft reply — coming soon.")
+        with btn_col3:
+            if st.button("Request more info", key="request_more_info"):
+                st.info("Request more info — coming soon.")
+
+        # Policy / draft reply
+        st.markdown("**Policy & draft reply**")
+        policy_fns = _policy_available()
+        if policy_fns:
+            get_relevant_policy, generate_draft_reply, generate_next_steps = policy_fns
+            with st.container(border=True):
+                policy_chunks = get_relevant_policy(content, tr.get("summary", ""))
+                draft = generate_draft_reply(content, tr, policy_chunks)
+                steps = generate_next_steps(content, tr, policy_chunks)
+                st.markdown("**Draft reply**")
+                st.text(draft)
+                st.markdown("**Suggested next steps**")
+                for s in steps:
+                    st.markdown(f"- {s}")
+        else:
+            st.caption("Install `chromadb` and run `pip install -r requirements.txt` for policy-based draft replies.")
 
 
 def main():

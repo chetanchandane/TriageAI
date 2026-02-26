@@ -5,12 +5,13 @@ Uses the same Supabase client as auth so the session (JWT) is sent and RLS allow
 Staff view: when SUPABASE_SERVICE_ROLE_KEY is set, fetches all messages (bypasses RLS); sorted by urgency then time.
 """
 import os
+import uuid
 from typing import Optional
 
 from dotenv import load_dotenv
 
 # Use auth's client so inserts run with the logged-in user's session (required for RLS)
-from auth import get_supabase_client
+from app.auth import get_supabase_client
 
 load_dotenv()
 
@@ -73,6 +74,7 @@ def save_message(
             # Fallback to demo store if table doesn't exist yet
             print(f"[messages_store] Supabase insert failed, using in-memory fallback: {e}")
             _demo_messages.append({
+                "id": str(uuid.uuid4()),
                 "user_id": user_id,
                 "patient_id": patient_id,
                 "full_name": full_name,
@@ -83,6 +85,7 @@ def save_message(
             })
     else:
         _demo_messages.append({
+            "id": str(uuid.uuid4()),
             "user_id": user_id,
             "patient_id": patient_id,
             "full_name": full_name,
@@ -93,16 +96,17 @@ def save_message(
         })
 
 
-def get_all_messages_for_staff() -> list[dict]:
-    """Return all messages for staff view, sorted by urgency (EMERGENCY first) then by created_at (newest first).
-    When SUPABASE_SERVICE_ROLE_KEY is set, uses it to fetch all messages across patients; otherwise uses anon client (RLS may limit to current user).
+def get_all_messages_for_staff(active_only: bool = True) -> list[dict]:
+    """Return messages for staff view, sorted by urgency (EMERGENCY first) then by created_at (newest first).
+    Ensures each message has an 'id' (UUID from DB or generated for demo).
+    When active_only=True (default), only returns messages whose triage_result.status is not "Resolved/Routed".
     """
     rows: list[dict] = []
-    # Prefer service role so staff see all patients' messages
+    # Prefer service role so staff see all patients' messages; explicitly select id and all columns
     sb_staff = _get_staff_supabase_client()
     if sb_staff:
         try:
-            r = sb_staff.table("messages").select("*").order("created_at", desc=True).execute()
+            r = sb_staff.table("messages").select("id, user_id, patient_id, full_name, email, content, triage_result, created_at").order("created_at", desc=True).execute()
             rows = list(r.data or [])
         except Exception:
             pass
@@ -110,16 +114,39 @@ def get_all_messages_for_staff() -> list[dict]:
         sb = get_supabase_client()
         if sb:
             try:
-                r = sb.table("messages").select("*").order("created_at", desc=True).execute()
+                r = sb.table("messages").select("id, user_id, patient_id, full_name, email, content, triage_result, created_at").order("created_at", desc=True).execute()
                 rows = list(r.data or [])
             except Exception:
                 pass
     if not rows:
         rows = list(_demo_messages)
+    # Ensure demo messages have id for older entries
+    for m in rows:
+        if m.get("id") is None:
+            m["id"] = str(uuid.uuid4())
+    if active_only:
+        rows = [m for m in rows if (m.get("triage_result") or {}).get("status") != "Resolved/Routed"]
     return sorted(rows, key=_urgency_sort_key)
 
 
 def get_messages_for_patient(user_id: str) -> list[dict]:
-    """Return messages for a single patient (for their history)."""
-    all_msgs = get_all_messages_for_staff()
+    """Return all messages for a single patient (for their history), including resolved."""
+    all_msgs = get_all_messages_for_staff(active_only=False)
     return [m for m in all_msgs if m.get("user_id") == user_id]
+
+
+def update_message_triage_result(message_id: str, triage_result: dict) -> bool:
+    """Update a message's triage_result (e.g. set status to 'Resolved/Routed'). Uses staff client when available."""
+    sb = _get_staff_supabase_client() or get_supabase_client()
+    if sb:
+        try:
+            sb.table("messages").update({"triage_result": triage_result}).eq("id", message_id).execute()
+            return True
+        except Exception:
+            return False
+    # Demo: update in-memory
+    for m in _demo_messages:
+        if m.get("id") == message_id:
+            m["triage_result"] = triage_result
+            return True
+    return False
