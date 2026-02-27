@@ -14,14 +14,14 @@ Traditional patient portals often lead to administrative bottlenecks. This syste
 
 | Layer | Technology |
 |-------|-----------|
-| **Orchestration** | LangGraph (stateful multi-agent workflow) |
-| **Reasoning** | Gemini 2.5 Flash (Google GenAI SDK) |
+| **Orchestration** | LangGraph (cyclic agentic state machine with conditional routing) |
+| **Reasoning** | Gemini 2.5 Flash via `langchain-google-genai` (tool-calling + structured output) |
 | **Safety** | Rule-based regex patterns (30+) + conservative LLM fallback |
 | **RAG** | ChromaDB (ephemeral, seeded with clinic policy snippets) |
 | **Database** | Supabase (PostgreSQL — Auth, profiles, messages with RLS); optional demo mode (in-memory) |
-| **Observability** | LangSmith (tracing every LLM call) |
+| **Observability** | LangSmith (tracing every LLM call, tool call, and graph transition) |
 | **Interface** | Streamlit (Patient portal + Staff dashboard) |
-| **Tool Protocol** | MCP (Model Context Protocol) — standardized tool layer for agent use |
+| **Tool Protocol** | MCP tools bound to the LLM via LangChain `@tool` + `langgraph.prebuilt.ToolNode` |
 
 ## Login & Patient Identity
 
@@ -35,7 +35,7 @@ The app includes a **login/register** flow so that:
 
 After login, the app shows two tabs:
 
-- **Patient view** — Send messages and view message history. Each submission runs through the Safety → Triage workflow and shows a triage summary.
+- **Patient view** — Send messages and view message history. Each submission runs through the full agentic workflow (Safety gate → Triage agent with tool calling → Synthesis) and shows a triage summary.
 - **Staff view** — Two-pane dashboard: active queue (sorted by urgency) on the left, detail view on the right. Shows AI analysis, safety flags, patient history, policy-grounded draft replies, and suggested next steps.
 
 ## Project Structure
@@ -51,9 +51,9 @@ triage-ai/
 │   ├── triage_agent.py           # Intent/urgency classification (Gemini)
 │   └── policy_agent.py           # RAG retrieval + draft reply generation (ChromaDB)
 ├── graph/                        # Orchestration Layer (LangGraph)
-│   ├── workflow.py               # Graph definition and edge routing
-│   ├── nodes.py                  # Graph node functions (safety, triage)
-│   └── state.py                  # TypedDict state + PatientContext dataclass
+│   ├── workflow.py               # Cyclic graph definition, conditional routing, entry point
+│   ├── nodes.py                  # Node functions (safety, triage_agent, synthesis) + tool wrappers
+│   └── state.py                  # TriageWorkflowState (with add_messages) + PatientContext
 ├── mcp/                          # Tool & Context Layer (MCP)
 │   ├── server.py                 # MCP server (exposes all tools)
 │   └── tools/
@@ -104,37 +104,65 @@ python -m pytest tests/test_tools.py -v
 
 ## Architecture
 
+The system uses a **cyclic agentic loop** — the triage agent can call tools, read the results, call more tools, and only produce a final assessment when it has enough context.
+
 ```
-Patient Message
-      │
-      ▼
-┌─────────────┐
-│ Safety Node │  Rule-based patterns (30+) → LLM fallback
-└──────┬──────┘
-       │
-       ▼
-┌─────────────┐
-│ Triage Node │  Gemini 2.5 Flash → TriageResult (intent, urgency, queue)
-└──────┬──────┘
-       │
-       ▼
-┌─────────────────┐
-│ Staff Dashboard │  Policy RAG · Draft reply · Next steps · Action buttons
-└─────────────────┘
+Patient Message + Patient ID
+           │
+           ▼
+   ┌───────────────┐
+   │  Safety Node  │  30+ regex patterns → conservative LLM fallback
+   └───────┬───────┘
+           │
+     ┌─────┴──────┐
+     │ Emergency? │
+     └─────┬──────┘
+       yes │         no
+           │          │
+           │          ▼
+           │  ┌────────────────────┐
+           │  │ Triage Agent Node  │  Gemini 2.5 Flash + bound MCP tools
+           │  └────────┬───────────┘
+           │           │
+           │     ┌─────┴──────┐
+           │     │ Tool calls?│
+           │     └─────┬──────┘
+           │       yes │        no
+           │           │         │
+           │           ▼         │
+           │    ┌────────────┐   │
+           │    │ Tool Node  │   │  ToolNode: get_patient_history,
+           │    │ (prebuilt) │   │  search_hospital_policy,
+           │    └──────┬─────┘   │  get_available_slots
+           │           │         │
+           │           └──► loop back to Triage Agent
+           │                     │
+           ▼                     ▼
+   ┌─────────────────┐
+   │ Synthesis Node  │  Extract structured TriageResult (JSON parse → Gemini fallback)
+   └────────┬────────┘
+            │
+            ▼
+   ┌─────────────────┐
+   │ Staff Dashboard │  Policy RAG · Draft reply · Next steps · Action buttons
+   └─────────────────┘
 ```
 
 ### Current status
 
 | Component | Status |
 |-----------|--------|
-| Safety Agent (rules + LLM) | Implemented |
-| Triage Agent (Gemini structured output) | Implemented |
+| Safety Agent (rules + LLM, 0% false-negative target) | Implemented |
+| Triage Agent (Gemini with tool calling) | Implemented (Sprint 2) |
 | Policy Agent (ChromaDB RAG + draft replies) | Implemented |
-| LangGraph workflow (Safety → Triage) | Implemented |
-| MCP tool layer (3 tools + server) | Implemented (Sprint 1) |
+| Cyclic LangGraph workflow (Safety → Agent loop → Synthesis) | Implemented (Sprint 2) |
+| MCP tool layer (3 tools + LangChain wrappers) | Implemented (Sprint 1 + 2) |
+| `ToolNode` (prebuilt, auto-routes tool calls) | Implemented (Sprint 2) |
+| Synthesis node (JSON parse + Gemini structured fallback) | Implemented (Sprint 2) |
+| Emergency short-circuit (safety → END, no agent call) | Implemented (Sprint 2) |
 | Login/Auth (Supabase + demo mode) | Implemented |
 | Staff dashboard (queue + detail view) | Implemented |
-| Context Loader Node (patient history injection) | Planned (Sprint 2) |
-| Parallel tool calls (RAG + Scheduling) | Planned (Sprint 2) |
-| Human-in-the-loop (staff edit before send) | Planned |
+| Human-in-the-loop (`staff_approved` flag in state) | Planned (Sprint 3) |
 | Real email notifications | Planned |
+| Persistent ChromaDB vector store | Planned |
+| Evaluation harness (LangSmith) | Planned |

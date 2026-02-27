@@ -1,17 +1,48 @@
 """
 State definitions for TriageAI.
-- TriageWorkflowState: TypedDict used by LangGraph workflow.
-- PatientContext: dataclass for the logged-in patient's session info.
+
+- TriageWorkflowState: TypedDict used by the LangGraph agentic workflow.
+  Uses `add_messages` reducer so tool outputs append to a running message log
+  instead of overwriting the original message.
+- PatientContext: dataclass for the logged-in patient's Streamlit session info.
 """
 from dataclasses import dataclass
-from typing import Any, Optional, TypedDict
+from typing import Annotated, List, Optional, TypedDict, Union
 
+from langgraph.graph.message import add_messages
+
+from schemas.schemas import SafetyResult, TriageResult
+
+
+# ---------------------------------------------------------------------------
+# LangGraph workflow state (the agent's "working memory")
+# ---------------------------------------------------------------------------
 
 class TriageWorkflowState(TypedDict, total=False):
+    # --- Inputs ---
+    patient_id: str
     message: str
-    safety_result: dict[str, Any]
-    triage_result: dict[str, Any]
 
+    # Message history for the agentic loop (HumanMessage → AIMessage → ToolMessage …)
+    messages: Annotated[list, add_messages]
+
+    # --- Structured outputs ---
+    safety_result: Optional[dict]
+    triage_result: Optional[dict]
+
+    # --- Context injected by tools ---
+    medical_history: Optional[str]
+    policy_context: Optional[List[str]]
+    draft_reply: Optional[str]
+
+    # --- Workflow control ---
+    is_emergency: bool          # Short-circuit flag from safety node
+    staff_approved: bool        # For Sprint 3 HITL
+
+
+# ---------------------------------------------------------------------------
+# Streamlit session helpers (unchanged from Sprint 1)
+# ---------------------------------------------------------------------------
 
 @dataclass
 class PatientContext:

@@ -24,10 +24,10 @@ from mcp.tools.communication import send_resolution_email
 load_dotenv()
 
 # Optional: workflow and policy (lazy import so app starts without langgraph/chromadb)
-def _run_workflow(msg: str):
+def _run_workflow(msg: str, patient_id: str = ""):
     try:
         from graph.workflow import run_triage_workflow
-        return run_triage_workflow(msg)
+        return run_triage_workflow(msg, patient_id=patient_id)
     except ImportError:
         from agents.safety_agent import screen_for_emergency
         from agents.triage_agent import test_triage
@@ -139,7 +139,7 @@ def render_patient_portal():
                 msg = content.strip()
                 # LangGraph workflow: Safety -> Triage
                 try:
-                    safety_result_dict, triage_result = _run_workflow(msg)
+                    safety_result_dict, triage_result = _run_workflow(msg, patient_id=patient.patient_id)
                 except Exception as e:
                     st.error(f"Workflow failed: {e}")
                     return
