@@ -1,6 +1,7 @@
 """
-TriageAI Streamlit app: login/register, patient portal, and staff view.
+TriageAI Streamlit app: login/register, patient portal, staff view, and HITL approvals.
 Messages are tied to patient identity (patient_id, full_name) for personalization and staff identification.
+Sprint 3: Human-in-the-Loop with persistence and staff approval workflow.
 """
 import os
 import sys
@@ -24,10 +25,10 @@ from mcp.tools.communication import send_resolution_email
 load_dotenv()
 
 # Optional: workflow and policy (lazy import so app starts without langgraph/chromadb)
-def _run_workflow(msg: str, patient_id: str = ""):
+def _run_workflow(msg: str, patient_id: str = "", patient_email: str = ""):
     try:
         from graph.workflow import run_triage_workflow
-        return run_triage_workflow(msg, patient_id=patient_id)
+        return run_triage_workflow(msg, patient_id=patient_id, patient_email=patient_email)
     except ImportError:
         from agents.safety_agent import screen_for_emergency
         from agents.triage_agent import test_triage
@@ -137,9 +138,13 @@ def render_patient_portal():
                 st.error("Please enter a message.")
             else:
                 msg = content.strip()
-                # LangGraph workflow: Safety -> Triage
+                # LangGraph workflow: Safety -> Triage -> Draft Reply (with HITL)
                 try:
-                    safety_result_dict, triage_result = _run_workflow(msg, patient_id=patient.patient_id)
+                    safety_result_dict, triage_result = _run_workflow(
+                        msg,
+                        patient_id=patient.patient_id,
+                        patient_email=patient.email,
+                    )
                 except Exception as e:
                     st.error(f"Workflow failed: {e}")
                     return
@@ -154,10 +159,22 @@ def render_patient_portal():
                     content=msg,
                     triage_result=triage_result,
                 )
-                st.success("Message submitted. Staff will review it.")
+
+                # Show appropriate confirmation based on HITL status
+                hitl_status = triage_result.get("hitl_status", "")
+                if hitl_status == "pending_review":
+                    st.success("Message submitted. A staff member will review and respond shortly.")
+                elif hitl_status == "auto_completed":
+                    st.success("Message submitted and processed. Check your email for a response.")
+                else:
+                    st.success("Message submitted. Staff will review it.")
+
                 if triage_result:
                     with st.expander("Triage summary"):
-                        st.json(triage_result)
+                        # Hide internal fields from patient view
+                        display_result = {k: v for k, v in triage_result.items()
+                                          if k not in ("thread_id", "hitl_status", "draft_reply")}
+                        st.json(display_result)
                 st.rerun()
 
     st.subheader("Your message history")
@@ -214,9 +231,16 @@ def render_staff_view():
             if len(m.get("content") or "") > 80:
                 content_snippet += "…"
             ts = (m.get("created_at") or "")[:19]
-            is_selected = m.get("id") == selected_id
+            hitl = tr.get("hitl_status", "")
             with st.container(border=True):
-                st.markdown(f"{emoji} **{urgency}** · **{full_name}**")
+                status_badge = ""
+                if hitl == "pending_review":
+                    status_badge = " ⏸️ *Pending*"
+                elif hitl == "approved":
+                    status_badge = " ✅ *Sent*"
+                elif hitl == "auto_completed":
+                    status_badge = " ⚡ *Auto*"
+                st.markdown(f"{emoji} **{urgency}** · **{full_name}**{status_badge}")
                 st.caption(content_snippet)
                 st.caption(ts)
                 if st.button("View", key=f"view_{m.get('id')}", use_container_width=True):
@@ -295,15 +319,88 @@ def render_staff_view():
             st.caption("Install `chromadb` and run `pip install -r requirements.txt` for policy-based draft replies.")
 
 
-def main():
-    # No automatic session restore: Supabase is never touched at startup, so a paused/slow project won't hang the app.
+def render_pending_approvals():
+    """HITL Pending Approvals: messages awaiting staff review before communication."""
+    messages = get_all_messages_for_staff(active_only=True)
+    pending = [m for m in messages if (m.get("triage_result") or {}).get("hitl_status") == "pending_review"]
 
+    if not pending:
+        st.caption("No messages pending approval. All workflows are either auto-completed or already approved.")
+        return
+
+    st.markdown(f"**{len(pending)} message(s) awaiting review**")
+
+    for idx, m in enumerate(pending):
+        tr = m.get("triage_result") or {}
+        full_name = m.get("full_name") or "—"
+        email = m.get("email") or "—"
+        patient_id = m.get("patient_id") or "—"
+        content = m.get("content") or ""
+        urgency = tr.get("urgency", "NORMAL")
+        thread_id = tr.get("thread_id", "")
+        draft = tr.get("draft_reply", "")
+
+        with st.container(border=True):
+            st.markdown(f"{_urgency_emoji(urgency)} **{urgency}** — **{full_name}** · {email} · `{patient_id}`")
+            st.caption(f"Message: {content[:200]}{'…' if len(content) > 200 else ''}")
+
+            # AI analysis summary
+            with st.expander("AI Analysis", expanded=False):
+                st.markdown(f"**Intent:** {tr.get('intent', '—')}")
+                st.markdown(f"**Summary:** {tr.get('summary', '—')}")
+                st.markdown(f"**Queue:** {tr.get('recommended_queue', '—')}")
+                st.markdown(f"**Confidence:** {tr.get('confidence', '—')}")
+                if tr.get("checklist"):
+                    st.markdown("**Checklist:**")
+                    for item in tr["checklist"]:
+                        st.markdown(f"- {item}")
+                if tr.get("safety_flagged"):
+                    st.warning(f"⚠️ Safety flagged: {tr.get('safety_reason', '')}")
+
+            # Editable draft reply
+            edited_draft = st.text_area(
+                "Draft reply (edit before approving)",
+                value=draft,
+                height=150,
+                key=f"draft_{m.get('id', idx)}",
+            )
+
+            # Action buttons
+            col_approve, col_reject = st.columns(2)
+            with col_approve:
+                if st.button("Approve & Send", type="primary", key=f"approve_{m.get('id', idx)}"):
+                    if not thread_id:
+                        st.error("No thread_id found — cannot resume workflow.")
+                    else:
+                        try:
+                            from graph.workflow import resume_workflow
+                            _safety, updated_triage = resume_workflow(
+                                thread_id=thread_id,
+                                edited_draft=edited_draft if edited_draft != draft else None,
+                            )
+                            # Update the message store with the approved result
+                            updated_triage["status"] = "Resolved/Routed"
+                            update_message_triage_result(m.get("id"), updated_triage)
+                            st.success(f"Approved and sent to {email}!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Resume failed: {e}")
+
+            with col_reject:
+                if st.button("Dismiss", key=f"dismiss_{m.get('id', idx)}"):
+                    dismissed_tr = {**tr, "hitl_status": "dismissed", "status": "Resolved/Routed"}
+                    update_message_triage_result(m.get("id"), dismissed_tr)
+                    st.info("Message dismissed.")
+                    st.rerun()
+
+
+def main():
     patient = get_patient_context(st.session_state)
     if patient is None:
         render_login_register()
         return
 
-    # Logged in: two tabs — Patient view and Staff view (for demo)
+    # Logged in: three tabs — Patient view, Staff view, Pending Approvals
     st.title("🏥 TriageAI")
     st.write(f"**{patient.full_name}** · {patient.patient_id} · *{patient.email}*")
     if st.button("Log out", key="logout_main"):
@@ -312,13 +409,16 @@ def main():
         st.rerun()
         return
 
-    tab_patient, tab_staff = st.tabs(["Patient view", "Staff view"])
+    tab_patient, tab_staff, tab_approvals = st.tabs(["Patient view", "Staff view", "Pending Approvals"])
     with tab_patient:
         st.caption("What the patient sees: send messages and view your own history.")
         render_patient_portal()
     with tab_staff:
         st.caption("What staff sees: all patient messages grouped by patient.")
         render_staff_view()
+    with tab_approvals:
+        st.caption("Messages awaiting staff review before communication is sent.")
+        render_pending_approvals()
 
 
 if __name__ == "__main__":

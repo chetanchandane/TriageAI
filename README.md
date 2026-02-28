@@ -14,13 +14,14 @@ Traditional patient portals often lead to administrative bottlenecks. This syste
 
 | Layer | Technology |
 |-------|-----------|
-| **Orchestration** | LangGraph (cyclic agentic state machine with conditional routing) |
+| **Orchestration** | LangGraph (cyclic agentic state machine with conditional routing + HITL interrupts) |
+| **Persistence** | LangGraph `MemorySaver` checkpointer (thread-based state recovery for HITL) |
 | **Reasoning** | Gemini 2.5 Flash via `langchain-google-genai` (tool-calling + structured output) |
-| **Safety** | Rule-based regex patterns (30+) + conservative LLM fallback |
+| **Safety** | Calibrated regex patterns (crisis-modifier gated) + LLM fallback with negative constraints |
 | **RAG** | ChromaDB (ephemeral, seeded with clinic policy snippets) |
 | **Database** | Supabase (PostgreSQL — Auth, profiles, messages with RLS); optional demo mode (in-memory) |
 | **Observability** | LangSmith (tracing every LLM call, tool call, and graph transition) |
-| **Interface** | Streamlit (Patient portal + Staff dashboard) |
+| **Interface** | Streamlit (Patient portal + Staff dashboard + HITL Pending Approvals) |
 | **Tool Protocol** | MCP tools bound to the LLM via LangChain `@tool` + `langgraph.prebuilt.ToolNode` |
 
 ## Login & Patient Identity
@@ -33,10 +34,11 @@ The app includes a **login/register** flow so that:
 
 ### UI layout (demo-friendly)
 
-After login, the app shows two tabs:
+After login, the app shows three tabs:
 
-- **Patient view** — Send messages and view message history. Each submission runs through the full agentic workflow (Safety gate → Triage agent with tool calling → Synthesis) and shows a triage summary.
-- **Staff view** — Two-pane dashboard: active queue (sorted by urgency) on the left, detail view on the right. Shows AI analysis, safety flags, patient history, policy-grounded draft replies, and suggested next steps.
+- **Patient view** — Send messages and view message history. Each submission runs through the full agentic workflow (Safety gate → Triage agent with tool calling → Synthesis → Draft reply) and shows a triage summary.
+- **Staff view** — Two-pane dashboard: active queue (sorted by urgency) on the left, detail view on the right. Shows AI analysis, safety flags, patient history, policy-grounded draft replies, and suggested next steps. HITL status badges (⏸️ Pending, ✅ Sent, ⚡ Auto) indicate workflow state.
+- **Pending Approvals** — HITL review tab. Lists messages where the workflow paused before sending communication (NORMAL/HIGH/EMERGENCY urgency). Staff can inspect the AI analysis, edit the draft reply, and click "Approve & Send" to resume the workflow and deliver the email.
 
 ## Project Structure
 
@@ -51,9 +53,9 @@ triage-ai/
 │   ├── triage_agent.py           # Intent/urgency classification (Gemini)
 │   └── policy_agent.py           # RAG retrieval + draft reply generation (ChromaDB)
 ├── graph/                        # Orchestration Layer (LangGraph)
-│   ├── workflow.py               # Cyclic graph definition, conditional routing, entry point
-│   ├── nodes.py                  # Node functions (safety, triage_agent, synthesis) + tool wrappers
-│   └── state.py                  # TriageWorkflowState (with add_messages) + PatientContext
+│   ├── workflow.py               # Cyclic graph + MemorySaver persistence + HITL interrupt/resume
+│   ├── nodes.py                  # Node functions (safety, triage_agent, synthesis, draft_reply, communication) + tool wrappers
+│   └── state.py                  # TriageWorkflowState (with add_messages, hitl_status) + PatientContext
 ├── mcp/                          # Tool & Context Layer (MCP)
 │   ├── server.py                 # MCP server (exposes all tools)
 │   └── tools/
@@ -104,14 +106,14 @@ python -m pytest tests/test_tools.py -v
 
 ## Architecture
 
-The system uses a **cyclic agentic loop** — the triage agent can call tools, read the results, call more tools, and only produce a final assessment when it has enough context.
+The system uses a **cyclic agentic loop** with **Human-in-the-Loop (HITL)** persistence. The triage agent can call tools, read the results, call more tools, and only produce a final assessment when it has enough context. For NORMAL/HIGH/EMERGENCY urgency, the workflow pauses for staff review before sending communication.
 
 ```
-Patient Message + Patient ID
+Patient Message + Patient ID + Email
            │
            ▼
    ┌───────────────┐
-   │  Safety Node  │  30+ regex patterns → conservative LLM fallback
+   │  Safety Node  │  Calibrated regex (crisis modifiers) → LLM fallback
    └───────┬───────┘
            │
      ┌─────┴──────┐
@@ -143,26 +145,53 @@ Patient Message + Patient ID
    └────────┬────────┘
             │
             ▼
-   ┌─────────────────┐
-   │ Staff Dashboard │  Policy RAG · Draft reply · Next steps · Action buttons
-   └─────────────────┘
+   ┌──────────────────┐
+   │ Draft Reply Node │  Policy RAG → generate draft for staff/patient
+   └────────┬─────────┘
+            │
+      ┌─────┴──────┐
+      │  Urgency?  │
+      └─────┬──────┘
+        LOW │            NORMAL / HIGH / EMERGENCY
+            │                     │
+            ▼                     ▼
+   ┌─────────────────┐  ┌────────────────────────┐
+   │ Auto-Communicate│  │  ⏸ CHECKPOINT PAUSE    │  ← MemorySaver interrupt
+   │  (send email)   │  │  (communication_node)  │
+   └────────┬────────┘  └────────────┬───────────┘
+            │                        │
+            │             Staff reviews & edits draft
+            │             Clicks "Approve & Send"
+            │                        │
+            │                        ▼
+            │               ┌────────────────┐
+            │               │ Send Email     │  resume_workflow()
+            │               └────────┬───────┘
+            ▼                        ▼
+          END                      END
 ```
 
 ### Current status
 
 | Component | Status |
 |-----------|--------|
-| Safety Agent (rules + LLM, 0% false-negative target) | Implemented |
+| Safety Agent (calibrated regex + LLM with negative constraints) | Implemented (refined Sprint 3) |
 | Triage Agent (Gemini with tool calling) | Implemented (Sprint 2) |
 | Policy Agent (ChromaDB RAG + draft replies) | Implemented |
-| Cyclic LangGraph workflow (Safety → Agent loop → Synthesis) | Implemented (Sprint 2) |
+| Cyclic LangGraph workflow (Safety → Agent loop → Synthesis → HITL) | Implemented (Sprint 2 + 3) |
 | MCP tool layer (3 tools + LangChain wrappers) | Implemented (Sprint 1 + 2) |
 | `ToolNode` (prebuilt, auto-routes tool calls) | Implemented (Sprint 2) |
 | Synthesis node (JSON parse + Gemini structured fallback) | Implemented (Sprint 2) |
-| Emergency short-circuit (safety → END, no agent call) | Implemented (Sprint 2) |
+| Draft reply node (policy RAG → staff-reviewable draft) | Implemented (Sprint 3) |
+| Communication node (email delivery, HITL-gated) | Implemented (Sprint 3) |
+| Emergency short-circuit (safety → synthesis, no agent call) | Implemented (Sprint 2) |
+| MemorySaver persistence (thread-based checkpointing) | Implemented (Sprint 3) |
+| Human-in-the-loop (interrupt → staff review → resume) | Implemented (Sprint 3) |
+| Conditional interrupts (LOW auto-complete, others paused) | Implemented (Sprint 3) |
 | Login/Auth (Supabase + demo mode) | Implemented |
-| Staff dashboard (queue + detail view) | Implemented |
-| Human-in-the-loop (`staff_approved` flag in state) | Planned (Sprint 3) |
+| Staff dashboard (queue + detail view + HITL badges) | Implemented (Sprint 3) |
+| Pending Approvals tab (edit draft, approve & send, dismiss) | Implemented (Sprint 3) |
 | Real email notifications | Planned |
 | Persistent ChromaDB vector store | Planned |
+| Persistent checkpointer (SqliteSaver / Redis) | Planned |
 | Evaluation harness (LangSmith) | Planned |

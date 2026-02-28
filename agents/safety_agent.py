@@ -18,12 +18,12 @@ load_dotenv()
 # Rule-based layer: explicit emergency signals (high recall to avoid false negatives)
 # ---------------------------------------------------------------------------
 EMERGENCY_PATTERNS = [
-    # Cardiac / chest
-    r"\bchest\s+pain\b",
+    # Cardiac / chest — require crisis modifiers to avoid flagging routine mentions
+    r"\b(sudden|crushing|severe|sharp|intense)\s+chest\s+pain\b",
     r"\bheart\s+attack\b",
-    r"\bheart\s+racing\b",
+    r"\bheart\s+(is\s+)?racing\s+with\s+(dizziness|fainting|shortness\s+of\s+breath|chest\s+pain)\b",
     r"\b(severe|sharp|crushing)\s+chest\b",
-    r"\bpain\s+(in|radiating to)\s+(my\s+)?(arm|jaw|back)\b",
+    r"\bpain\s+(in|radiating\s+to)\s+(my\s+)?(arm|jaw|back)\b",
     # Respiratory
     r"\b(can'?t|cannot|can\s+not)\s+breathe\b",
     r"\bdifficulty\s+breathing\b",
@@ -36,8 +36,8 @@ EMERGENCY_PATTERNS = [
     r"\b(face\s+droop|drooping\s+face)\b",
     r"\b(sudden\s+)?(numbness|weakness)\s+(in|on)\s+(one\s+side|arm|leg|face)\b",
     r"\bsudden\s+(severe\s+)?headache\b",
-    r"\b(confusion|slurred\s+speech)\b",
-    r"\bvision\s+(loss|blurred|double)\b",
+    r"\bslurred\s+speech\b",
+    r"\bsudden\s+(confusion|vision\s+(loss|blurred|double))\b",
     # Bleeding / trauma
     r"\bsevere\s+bleeding\b",
     r"\b(heavy|uncontrolled)\s+bleeding\b",
@@ -48,12 +48,12 @@ EMERGENCY_PATTERNS = [
     r"\bhurt\s+myself\s+(on\s+purpose|intentionally)\b",
     # Other life-threatening
     r"\b(overdose|overdosed)\b",
-    r"\b(severe\s+)?allergic\s+reaction\b",
+    r"\bsevere\s+allergic\s+reaction\b",
     r"\banaphylax(is)?\b",
     r"\b(seizure|seizing)\b",
     r"\b(unconscious|passed\s+out|fainted)\b",
     r"\b(poison|poisoned)\b",
-    r"\b(severe|sudden)\s+(abdominal\s+)?pain\b",
+    r"\b(sudden|severe|acute)\s+(abdominal\s+)?pain\b",
     r"\b(coughing|vomiting)\s+blood\b",
     r"\b(thoughts?|plan)\s+to\s+(harm|kill)\b",
 ]
@@ -104,6 +104,14 @@ RULES:
 - If there is ANY reasonable chance the situation could be life-threatening (heart attack, stroke, severe bleeding, difficulty breathing, overdose, suicidal intent, severe allergic reaction, unconscious, choking, etc.), answer is_potential_emergency: true.
 - When in doubt, answer true. We prefer false positives over missing a real emergency.
 - Only answer false if the message is clearly non-urgent (e.g. refill, appointment, general question with no acute symptoms).
+
+NEGATIVE CONSTRAINTS — Do NOT flag these as emergencies:
+- Routine medication refill requests (e.g. "I need to refill my blood pressure medication").
+- Appointment scheduling or rescheduling requests.
+- Billing, insurance, or administrative questions.
+- Chronic or stable symptoms that have persisted for more than 1 week without worsening (e.g. "I've had mild back pain for a few weeks").
+- General health questions or follow-ups (e.g. "When should I come in for my annual checkup?").
+- Mild, non-acute symptoms described without urgency modifiers (e.g. "I have some chest discomfort when I exercise that's been going on for months" is NOT the same as "I'm having sudden crushing chest pain right now").
 
 Message to screen:
 """

@@ -21,6 +21,7 @@ from schemas.schemas import SafetyResult, TriageResult
 class TriageWorkflowState(TypedDict, total=False):
     # --- Inputs ---
     patient_id: str
+    patient_email: str
     message: str
 
     # Message history for the agentic loop (HumanMessage → AIMessage → ToolMessage …)
@@ -38,6 +39,7 @@ class TriageWorkflowState(TypedDict, total=False):
     # --- Workflow control ---
     is_emergency: bool          # Short-circuit flag from safety node
     staff_approved: bool        # For Sprint 3 HITL
+    hitl_status: Optional[str]  # "pending_review", "approved", "auto_completed"
 
 
 # ---------------------------------------------------------------------------

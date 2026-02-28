@@ -265,6 +265,57 @@ Classify this message with intent, confidence, urgency, summary, checklist, and 
     return _parse_triage_json(agent_response)
 
 
+# ---------------------------------------------------------------------------
+# Node: Draft Reply (generates a policy-grounded reply for staff review)
+# ---------------------------------------------------------------------------
+
+def draft_reply_node(state: TriageWorkflowState) -> dict[str, Any]:
+    """
+    Generate a policy-grounded draft reply for the patient message.
+    Uses the policy agent's RAG to retrieve relevant policies and draft a reply.
+    """
+    message = state.get("message", "")
+    triage_result = state.get("triage_result") or {}
+
+    try:
+        from agents.policy_agent import get_relevant_policy, generate_draft_reply
+        policy_chunks = get_relevant_policy(message, triage_result.get("summary", ""))
+        draft = generate_draft_reply(message, triage_result, policy_chunks)
+    except Exception:
+        draft = f"Thank you for contacting us regarding: {triage_result.get('summary', 'your concern')}. A staff member will review your message shortly."
+
+    return {"draft_reply": draft}
+
+
+# ---------------------------------------------------------------------------
+# Node: Communication (sends the final email — interrupted for HITL review)
+# ---------------------------------------------------------------------------
+
+def communication_node(state: TriageWorkflowState) -> dict[str, Any]:
+    """
+    Send the finalized draft reply to the patient via email.
+    This node is interrupted (paused) for NORMAL/HIGH/EMERGENCY urgency
+    so staff can review and edit the draft before it is sent.
+    For LOW urgency, this node runs automatically.
+    """
+    from mcp.tools.communication import send_resolution_email
+
+    patient_email = state.get("patient_email", "")
+    draft_reply = state.get("draft_reply", "")
+    triage_result = state.get("triage_result") or {}
+
+    urgency = triage_result.get("urgency", "NORMAL")
+    subject = f"[TriageAI] Re: {triage_result.get('summary', 'Your message')}"
+
+    if patient_email and draft_reply:
+        send_resolution_email(patient_email, subject, draft_reply)
+
+    return {
+        "staff_approved": True,
+        "hitl_status": "approved",
+    }
+
+
 def _parse_triage_json(text: str) -> dict:
     """
     Extract a JSON object from the LLM's response text.
