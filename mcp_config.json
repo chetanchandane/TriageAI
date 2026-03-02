@@ -1,0 +1,7 @@
+{
+  "policy-server": {
+    "transport": "stdio",
+    "command": "chroma-mcp-server",
+    "args": ["--client-type", "persistent", "--data-dir", "./data/vector_store"]
+  }
+}

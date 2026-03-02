@@ -55,7 +55,10 @@ def get_available_slots() -> str:
     return ", ".join(slots)
 
 
-# All tools available to the triage agent
+# Local (non-MCP) tools — always available
+LOCAL_TOOLS = [get_patient_history, get_available_slots]
+
+# Full tool list including local RAG — used as fallback when MCP is unavailable
 TRIAGE_TOOLS = [get_patient_history, search_hospital_policy, get_available_slots]
 
 
@@ -66,15 +69,15 @@ TRIAGE_TOOLS = [get_patient_history, search_hospital_policy, get_available_slots
 TRIAGE_SYSTEM_PROMPT = """You are a professional Medical Triage Agent for a clinic patient portal.
 
 Your job is to analyze a patient's message and produce a clinical triage assessment. You have access to tools that let you:
-1. **get_patient_history** — Look up the patient's medical history by their patient_id.
-2. **search_hospital_policy** — Search clinic policies (refill rules, appointment booking, billing, emergency protocols, etc.).
-3. **get_available_slots** — Check available appointment time slots.
+1. Look up the patient's medical history by their patient_id.
+2. Search clinic policies (refill rules, appointment booking, billing, emergency protocols, etc.) using the available policy search tool.
+3. Check available appointment time slots.
 
 ## Workflow
 1. Read the patient's message carefully.
-2. If you need the patient's medical history, call get_patient_history with their patient_id.
-3. If the message relates to clinic policies (refills, appointments, billing, referrals, lab results), call search_hospital_policy with a relevant query.
-4. If the patient asks about scheduling, call get_available_slots.
+2. If you need the patient's medical history, use the patient history tool with their patient_id.
+3. If the message relates to clinic policies (refills, appointments, billing, referrals, lab results), use the available policy search tool with a relevant query.
+4. If the patient asks about scheduling, use the available slots tool.
 5. You may call multiple tools if the message has multiple intents.
 6. After gathering all necessary context, produce your final triage assessment.
 
@@ -115,22 +118,29 @@ def safety_node(state: TriageWorkflowState) -> dict[str, Any]:
 # Node: Triage Agent (Reasoning + Tool Calling)
 # ---------------------------------------------------------------------------
 
-def _build_triage_model():
-    """Build Gemini model with MCP tools bound for agentic reasoning."""
+def _build_triage_model(tools=None):
+    """Build Gemini model with tools bound for agentic reasoning.
+
+    Args:
+        tools: list of LangChain tools to bind. Defaults to TRIAGE_TOOLS (local
+               fallback list) when None, but callers can pass MCP-discovered tools.
+    """
+    if tools is None:
+        tools = TRIAGE_TOOLS
     api_key = os.environ.get("LLM_GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
     llm = ChatGoogleGenerativeAI(
         model="gemini-2.5-flash",
         google_api_key=api_key,
     )
-    return llm.bind_tools(TRIAGE_TOOLS)
+    return llm.bind_tools(tools)
 
 
-def triage_agent_node(state: TriageWorkflowState) -> dict[str, Any]:
+def _triage_agent_node_impl(state: TriageWorkflowState, tools=None) -> dict[str, Any]:
     """
-    Invoke Gemini with the current message history.
+    Core triage agent logic. Invoke Gemini with the current message history.
     The model may return tool_calls (routed to tool_node) or a final text response.
     """
-    model = _build_triage_model()
+    model = _build_triage_model(tools)
 
     messages = list(state.get("messages") or [])
 
@@ -157,6 +167,21 @@ def triage_agent_node(state: TriageWorkflowState) -> dict[str, Any]:
     response = model.invoke(messages)
 
     return {"messages": [response]}
+
+
+def triage_agent_node(state: TriageWorkflowState) -> dict[str, Any]:
+    """Default triage agent node using TRIAGE_TOOLS (local fallback)."""
+    return _triage_agent_node_impl(state, tools=None)
+
+
+def _make_triage_agent_node(tools):
+    """Closure factory: returns a triage_agent_node bound to a specific tool list.
+
+    Used by the graph builder to inject MCP-discovered tools into the node.
+    """
+    def _node(state: TriageWorkflowState) -> dict[str, Any]:
+        return _triage_agent_node_impl(state, tools=tools)
+    return _node
 
 
 # ---------------------------------------------------------------------------

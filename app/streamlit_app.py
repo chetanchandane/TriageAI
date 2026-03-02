@@ -1,13 +1,16 @@
 """
 TriageAI Streamlit app: login/register, patient portal, staff view, and HITL approvals.
 Messages are tied to patient identity (patient_id, full_name) for personalization and staff identification.
-Sprint 3: Human-in-the-Loop with persistence and staff approval workflow.
+Sprint 4: Chroma MCP Server integration with nest_asyncio for async compatibility.
 """
 import os
 import sys
 
 # Ensure the project root is on sys.path so all package imports resolve correctly.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import nest_asyncio
+nest_asyncio.apply()
 
 import streamlit as st
 from dotenv import load_dotenv

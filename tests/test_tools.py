@@ -1,6 +1,6 @@
 """
-Verification test script for Sprint 1 MCP tools.
-Tests that ChromaDB and Supabase queries work through the new tool functions.
+Verification test script for TriageAI MCP tools.
+Tests Sprint 1 tools (ChromaDB, Supabase) plus Sprint 4 persistent store and MCP discovery.
 
 Run from project root:
     python -m pytest tests/test_tools.py -v
@@ -121,10 +121,92 @@ def test_schemas_importable():
 
 
 # ---------------------------------------------------------------------------
+# Sprint 4: Persistent vector store verification
+# ---------------------------------------------------------------------------
+
+def test_persistent_store_collection():
+    """PersistentClient at ./data/vector_store should have hospital_policies collection."""
+    import chromadb
+
+    store_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "data", "vector_store",
+    )
+    if not os.path.exists(store_path):
+        # Seed script hasn't run yet; trigger inline fallback via policy_agent
+        from agents.policy_agent import _get_collection
+        coll = _get_collection()
+        assert coll is not None, "policy_agent._get_collection() returned None"
+        assert coll.count() >= 7, f"Expected >=7 docs, got {coll.count()}"
+        print(f"  [PASS] Persistent store created via inline fallback ({coll.count()} docs)")
+        return
+
+    client = chromadb.PersistentClient(path=store_path)
+    collections = [c.name for c in client.list_collections()]
+    assert "hospital_policies" in collections, (
+        f"Expected 'hospital_policies' collection, found: {collections}"
+    )
+    coll = client.get_collection("hospital_policies")
+    assert coll.count() >= 7, f"Expected >=7 documents, got {coll.count()}"
+    print(f"  [PASS] Persistent store has {coll.count()} docs in 'hospital_policies'")
+
+
+def test_persistent_store_query():
+    """Querying the persistent store for 'emergency' should return relevant results."""
+    from agents.policy_agent import get_relevant_policy
+
+    results = get_relevant_policy("emergency life threatening", "", top_k=2)
+    assert len(results) > 0, "Expected at least 1 result from persistent store"
+    texts = " ".join(results).lower()
+    assert "emergency" in texts or "911" in texts, (
+        f"Expected emergency content, got: {texts[:200]}"
+    )
+    print(f"  [PASS] Persistent store query returned relevant results")
+
+
+def test_mcp_config_exists():
+    """mcp_config.json should exist and be valid JSON with policy-server key."""
+    import json
+
+    config_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "mcp_config.json",
+    )
+    assert os.path.exists(config_path), f"mcp_config.json not found at {config_path}"
+    with open(config_path) as f:
+        config = json.load(f)
+    assert "policy-server" in config, f"Expected 'policy-server' key, got: {list(config.keys())}"
+    assert config["policy-server"]["transport"] == "stdio"
+    print(f"  [PASS] mcp_config.json valid with policy-server config")
+
+
+def test_graph_build_local_fallback():
+    """build_graph() should succeed even without MCP server (local-only fallback)."""
+    from graph.workflow import _build_graph_local_only
+    compiled = _build_graph_local_only()
+    assert compiled is not None, "Local-only graph compilation returned None"
+    print(f"  [PASS] Local-only graph builds successfully")
+
+
+def test_tool_lists_exported():
+    """graph.nodes should export both LOCAL_TOOLS and TRIAGE_TOOLS."""
+    from graph.nodes import LOCAL_TOOLS, TRIAGE_TOOLS
+    assert len(LOCAL_TOOLS) == 2, f"Expected 2 LOCAL_TOOLS, got {len(LOCAL_TOOLS)}"
+    assert len(TRIAGE_TOOLS) == 3, f"Expected 3 TRIAGE_TOOLS, got {len(TRIAGE_TOOLS)}"
+    local_names = {t.name for t in LOCAL_TOOLS}
+    assert "get_patient_history" in local_names
+    assert "get_available_slots" in local_names
+    triage_names = {t.name for t in TRIAGE_TOOLS}
+    assert "search_hospital_policy" in triage_names
+    print(f"  [PASS] LOCAL_TOOLS={local_names}, TRIAGE_TOOLS={triage_names}")
+
+
+# ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
 
 ALL_TESTS = [
+    # Sprint 1 tests
     test_get_patient_history_returns_string,
     test_get_patient_history_with_valid_id,
     test_search_hospital_policy_returns_list,
@@ -133,12 +215,18 @@ ALL_TESTS = [
     test_get_available_slots_returns_list,
     test_mcp_server_exports,
     test_schemas_importable,
+    # Sprint 4 tests
+    test_persistent_store_collection,
+    test_persistent_store_query,
+    test_mcp_config_exists,
+    test_graph_build_local_fallback,
+    test_tool_lists_exported,
 ]
 
 
 def main():
     print("=" * 60)
-    print("TriageAI Sprint 1 — MCP Tool Verification")
+    print("TriageAI — MCP Tool Verification (Sprint 1 + 4)")
     print("=" * 60)
 
     passed = 0

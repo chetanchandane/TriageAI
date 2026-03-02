@@ -83,13 +83,25 @@ It tracks *why* you made certain decisions—this is what professors love to see
   - Routing logic: LOW → `auto_communicate` (no interrupt). NORMAL/HIGH/EMERGENCY → `communication_node` (interrupted).
   - Sprint 1 regression: All 8 original MCP tool tests still pass.
 
+## Phase 6 Goals: Refactor RAG to Official Chroma MCP Server — Sprint 4
+
+- [X] **Persistent vector store (`agents/policy_agent.py`)** — Replaced `chromadb.EphemeralClient()` with `chromadb.PersistentClient(path="./data/vector_store")`. Collection renamed from `"policy"` → `"hospital_policies"`. Inline fallback seed retained for backward compatibility (if seed script hasn't been run). Decision: persistent storage means policy documents survive app restarts without re-seeding.
+- [X] **Seed script (`scripts/seed_policy.py`)** — Idempotent one-time script that populates the persistent vector store with 7 default clinic policy documents. Uses `get_or_create_collection` + count check so running it twice is safe. Decision: separating seeding from runtime initialization makes deployment explicit and predictable.
+- [X] **MCP config (`mcp_config.json`)** — Added stdio transport config for `chroma-mcp-server` with `--client-type persistent --data-dir ./data/vector_store`. This is read by `MultiServerMCPClient` to launch the Chroma MCP server as a subprocess. Decision: externalizing the config makes it easy to add more MCP servers later.
+- [X] **Tool splitting (`graph/nodes.py`)** — Exported `LOCAL_TOOLS` (non-MCP: `get_patient_history`, `get_available_slots`) and kept `TRIAGE_TOOLS` as the fallback list including local `search_hospital_policy`. Parameterized `_build_triage_model(tools=None)` and created `_make_triage_agent_node(tools)` closure factory so the graph builder can inject MCP-discovered tools. Updated system prompt to use generic tool references. Decision: decoupling tool discovery from node construction enables MCP tools to be swapped in transparently.
+- [X] **Async MCP graph builder (`graph/workflow.py`)** — Added `build_graph_async()` which discovers MCP tools via `MultiServerMCPClient`, merges them with `LOCAL_TOOLS`, and builds the graph with the merged tool list. `build_graph()` stays sync — wraps `asyncio.run(build_graph_async())` with try/except fallback to `_build_graph_local_only()`. `nest_asyncio.apply()` called at module level for Streamlit compatibility. Decision: the async bridge pattern keeps the entire public API synchronous while enabling MCP tool discovery.
+- [X] **Streamlit update (`app/streamlit_app.py`)** — Added `nest_asyncio` import and `apply()` at top. No other changes. Decision: `nest_asyncio` is required because Streamlit already runs an event loop and `asyncio.run()` would fail without it.
+- [X] **Deprecation note (`mcp/tools/rag_tools.py`)** — Added deprecation docstring explaining that `search_hospital_policy` is now a fallback; the MCP server's `chroma_query_documents` is preferred when available. No functional change. Decision: keeps the module for backward compatibility but signals the direction.
+- [X] **New dependencies** — Added `chroma-mcp-server>=0.2.0`, `langchain-mcp-adapters>=0.1.0`, `nest-asyncio>=1.6.0` to `requirements.txt`.
+- [X] **Tests (`tests/test_tools.py`)** — Added 5 Sprint 4 tests: persistent store collection check, persistent store query, MCP config validation, local-only graph fallback build, and tool list export verification. All Sprint 1 tests still pass.
+- [X] **Fallback safety** — If `chroma-mcp-server` fails to start or `langchain-mcp-adapters` can't discover tools, `build_graph()` catches the exception and falls back to `_build_graph_local_only()` which uses `TRIAGE_TOOLS` (includes local `search_hospital_policy`). The app degrades gracefully to Sprint 3 behavior.
+
 ## Current Roadblocks / Notes
 
 - Need to read more research on this topic. (I have compiled some information in a word doc; I will make it public and paste the link here.) [Research Notes](https://docs.google.com/document/d/1Gr3C9JskVDrQheYMiz4jvEEy_VRp9OTWS1hD-DlHIaM/edit?usp=sharing)
 
-## What's Next (Sprint 4+)
+## What's Next (Sprint 5+)
 
 - **Real email/notification integration:** Replace the mock `send_resolution_email` with a real provider (Resend, SendGrid, or smtplib).
-- **Persistent ChromaDB:** Move from `EphemeralClient` to a persistent vector store so policy documents survive restarts.
 - **Persistent checkpointer:** Upgrade from `MemorySaver` (in-memory, lost on restart) to `SqliteSaver` or Redis for production durability.
 - **Evaluation harness:** Build a dataset of labeled patient messages and measure triage accuracy, safety recall, and tool-call precision using LangSmith evaluations.

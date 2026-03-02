@@ -1,11 +1,16 @@
 """
 LangGraph workflow: Cyclic Agentic Orchestrator with HITL for TriageAI.
 
-Graph flow (Sprint 3):
+Graph flow (Sprint 4):
   START → safety_node → [emergency? → synthesis | → triage_agent_node]
   triage_agent_node → [tool_calls? → tool_node → triage_agent_node | → synthesis_node]
   synthesis_node → draft_reply_node → [LOW? → auto_communicate → END
                                        | → **communication_node** (INTERRUPTED) → END]
+
+Sprint 4 changes:
+  - MCP tool discovery via MultiServerMCPClient (async, bridged to sync)
+  - Local-only fallback when MCP server unavailable
+  - nest_asyncio for Streamlit compatibility
 
 Persistence:
   MemorySaver checkpointer saves every node's state to a thread_id.
@@ -15,8 +20,15 @@ Persistence:
 Resume:
   Staff edits the draft_reply via update_state, then resumes with invoke(None, config).
 """
+import asyncio
+import json
+import os
 import uuid
 from typing import Any
+
+import nest_asyncio
+
+nest_asyncio.apply()
 
 from langchain_core.messages import AIMessage, HumanMessage
 
@@ -27,6 +39,8 @@ from graph.nodes import (
     synthesis_node,
     draft_reply_node,
     communication_node,
+    _make_triage_agent_node,
+    LOCAL_TOOLS,
     TRIAGE_TOOLS,
 )
 
@@ -99,9 +113,38 @@ def _auto_communicate_node(state: TriageWorkflowState) -> dict[str, Any]:
 _compiled: Any = None
 _checkpointer: Any = None
 
+# Module-level MCP singleton (populated by _init_mcp_tools)
+_mcp_tools: list | None = None
 
-def build_graph():
-    """Build and compile the agentic graph with MemorySaver and HITL interrupts."""
+MCP_CONFIG_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "mcp_config.json",
+)
+
+
+async def _init_mcp_tools() -> list:
+    """Discover MCP tools from chroma-mcp-server via MultiServerMCPClient.
+
+    Reads mcp_config.json, launches the Chroma MCP server as a subprocess,
+    and returns the list of LangChain-wrapped tools it exposes.
+    Caches the result so the server is only started once per process.
+    """
+    global _mcp_tools
+    if _mcp_tools is not None:
+        return _mcp_tools
+
+    from langchain_mcp_adapters.client import MultiServerMCPClient
+
+    with open(MCP_CONFIG_PATH) as f:
+        config = json.load(f)
+
+    client = MultiServerMCPClient(config)
+    _mcp_tools = await client.get_tools()
+    return _mcp_tools
+
+
+def _compile_graph(all_tools, triage_node_fn):
+    """Shared graph compilation logic used by both MCP and local-only builders."""
     global _checkpointer
     from langgraph.graph import StateGraph, END
     from langgraph.prebuilt import ToolNode
@@ -111,8 +154,8 @@ def build_graph():
 
     # --- Add nodes ---
     graph.add_node("safety", safety_node)
-    graph.add_node("triage_agent", triage_agent_node)
-    graph.add_node("tool_node", ToolNode(TRIAGE_TOOLS))
+    graph.add_node("triage_agent", triage_node_fn)
+    graph.add_node("tool_node", ToolNode(all_tools))
     graph.add_node("synthesis", synthesis_node)
     graph.add_node("draft_reply", draft_reply_node)
     graph.add_node("communication_node", communication_node)
@@ -122,34 +165,23 @@ def build_graph():
     graph.set_entry_point("safety")
 
     # --- Conditional edges ---
-    # After safety: emergency → synthesis (short-circuit), else → triage agent
     graph.add_conditional_edges(
         "safety",
         _route_after_safety,
         {"synthesis": "synthesis", "triage_agent": "triage_agent"},
     )
-
-    # After triage agent: tool_calls → tool_node, else → synthesis
     graph.add_conditional_edges(
         "triage_agent",
         _should_continue,
         {"tool_node": "tool_node", "synthesis": "synthesis"},
     )
-
-    # The loop: tool_node feeds results back to triage agent for re-evaluation
     graph.add_edge("tool_node", "triage_agent")
-
-    # Synthesis → draft reply (always)
     graph.add_edge("synthesis", "draft_reply")
-
-    # After draft reply: LOW → auto_communicate, others → communication_node (interrupted)
     graph.add_conditional_edges(
         "draft_reply",
         _route_after_draft,
         {"auto_communicate": "auto_communicate", "communication_node": "communication_node"},
     )
-
-    # Both communicate paths lead to END
     graph.add_edge("auto_communicate", END)
     graph.add_edge("communication_node", END)
 
@@ -159,6 +191,34 @@ def build_graph():
         checkpointer=_checkpointer,
         interrupt_before=["communication_node"],
     )
+
+
+async def build_graph_async():
+    """Build graph with MCP-discovered tools merged with LOCAL_TOOLS."""
+    mcp_tools = await _init_mcp_tools()
+    all_tools = LOCAL_TOOLS + list(mcp_tools)
+    triage_node = _make_triage_agent_node(all_tools)
+    return _compile_graph(all_tools, triage_node)
+
+
+def _build_graph_local_only():
+    """Build graph using only local TRIAGE_TOOLS (Sprint 3 behavior)."""
+    return _compile_graph(TRIAGE_TOOLS, triage_agent_node)
+
+
+def build_graph():
+    """Build and compile the agentic graph.
+
+    Attempts MCP tool discovery first. If the MCP server is unavailable
+    (missing config, server not installed, etc.), falls back to the
+    local-only graph using TRIAGE_TOOLS.
+    """
+    if os.path.exists(MCP_CONFIG_PATH):
+        try:
+            return asyncio.run(build_graph_async())
+        except Exception:
+            pass
+    return _build_graph_local_only()
 
 
 # ---------------------------------------------------------------------------

@@ -1,6 +1,10 @@
 """
 Policy Agent (RAG): retrieve clinic policy context from ChromaDB and generate
 draft replies or suggested next steps based on message + triage + policy.
+
+Sprint 4: switched from EphemeralClient to PersistentClient at ./data/vector_store
+so the vector store survives restarts. Run `python scripts/seed_policy.py` once to
+populate the store.
 """
 import os
 from typing import Optional
@@ -8,6 +12,12 @@ from typing import Optional
 from dotenv import load_dotenv
 
 load_dotenv()
+
+VECTOR_STORE_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "data",
+    "vector_store",
+)
 
 # Default policy snippets (in production, load from files or CMS)
 DEFAULT_POLICIES = [
@@ -24,17 +34,21 @@ _collection = None
 
 
 def _get_collection():
-    """Lazy-init ChromaDB collection with default policy documents."""
+    """Lazy-init ChromaDB collection with default policy documents (persistent store)."""
     global _collection
     if _collection is not None:
         return _collection
     try:
         import chromadb
-        client = chromadb.EphemeralClient()
-        coll = client.get_or_create_collection("policy", metadata={"description": "Clinic policy snippets"})
-        # Add default docs if empty
+        os.makedirs(VECTOR_STORE_PATH, exist_ok=True)
+        client = chromadb.PersistentClient(path=VECTOR_STORE_PATH)
+        coll = client.get_or_create_collection(
+            "hospital_policies",
+            metadata={"description": "Clinic policy snippets"},
+        )
+        # Inline fallback seed if store is empty (e.g. seed script not yet run)
         if coll.count() == 0:
-            ids = [f"doc_{i}" for i in range(len(DEFAULT_POLICIES))]
+            ids = [f"policy_{i}" for i in range(len(DEFAULT_POLICIES))]
             coll.add(documents=DEFAULT_POLICIES, ids=ids)
         _collection = coll
         return coll
