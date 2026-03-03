@@ -24,6 +24,16 @@
 
 - **Messages not saving to Supabase / Staff view empty:** Patient submissions did not appear in the `messages` table or in Staff view. **Cause:** `messages_store.py` created its own Supabase client; that client was never used for login, so it had no session (JWT). Inserts ran with the anon key only, `auth.uid()` was null, and RLS policy "Users can insert own messages" blocked the insert. The code then fell back to the in-memory demo list, so nothing persisted. **Fix:** Auth exposes `get_supabase_client()`; `messages_store` now uses that same client for `save_message` and `get_all_messages_for_staff()`. The client that holds the logged-in user's session (set at login) is used for message operations, so RLS allows the insert and messages persist in Supabase.
 
+## Sprint 5: Multimodal Streaming Assistant (Mar 2026)
+
+- No blocking errors encountered during Sprint 5 implementation. All 19 tests (13 existing + 6 new) pass.
+- **Design note — `stream_mode="messages"`:** LangGraph 1.0.9's sync `app.stream(stream_mode="messages")` yields `(AIMessage, metadata)` tuples. When `interrupt()` is called inside a node, the stream simply stops yielding (0 events). The interrupt value is found via `app.get_state(config)` → `snapshot.tasks[i].interrupts[0].value`. This required the safe-stream bridge pattern in `app/streaming.py` to detect and surface interrupts after the stream exhausts.
+- **Design note — base64 data URIs:** Streamlit `UploadedFile` bytes are encoded as `data:mime;base64,...` and embedded directly in LangGraph state. This avoids temp file management and is JSON-serializable for the `MemorySaver` checkpointer.
+
+## Runtime / Streamlit
+
+- **`ValueError: Can't patch loop of type <class 'uvloop.Loop'>`:** When running under Streamlit, the event loop is **uvloop** (not the standard asyncio loop). `nest_asyncio.apply()` only patches `asyncio.BaseEventLoop`, so it raises. **Fix:** In `app/streamlit_app.py` and `graph/workflow.py`, wrap `nest_asyncio.apply()` in try/except; on `ValueError` mentioning "uvloop" or "patch", skip (no-op). The app and sync graph path still work; nested async is only needed when using MCP discovery inside an existing loop.
+
 ## Repo & Tooling
 
 - **Cursor worktrees:** Application files can appear under `.cursor/worktrees/` (IDE cache). To avoid committing those or absolute paths into the repo, `.cursor/` and `**/.cursor/` were added to `.gitignore`. The single source of truth for app code is the repository root (e.g. `Desktop/capstone/TriageAI`).

@@ -27,18 +27,26 @@ import uuid
 from typing import Any
 
 import nest_asyncio
-
-nest_asyncio.apply()
+try:
+    nest_asyncio.apply()
+except ValueError as e:
+    if "uvloop" in str(e) or "patch" in str(e).lower():
+        pass  # Under Streamlit/uvloop, skip — sync graph path still works
+    else:
+        raise
 
 from langchain_core.messages import AIMessage, HumanMessage
 
 from graph.state import TriageWorkflowState
+from langgraph.types import Command
+
 from graph.nodes import (
     safety_node,
     triage_agent_node,
     synthesis_node,
     draft_reply_node,
     communication_node,
+    checklist_gate_node,
     _make_triage_agent_node,
     LOCAL_TOOLS,
     TRIAGE_TOOLS,
@@ -156,6 +164,7 @@ def _compile_graph(all_tools, triage_node_fn):
     graph.add_node("safety", safety_node)
     graph.add_node("triage_agent", triage_node_fn)
     graph.add_node("tool_node", ToolNode(all_tools))
+    graph.add_node("checklist_gate", checklist_gate_node)
     graph.add_node("synthesis", synthesis_node)
     graph.add_node("draft_reply", draft_reply_node)
     graph.add_node("communication_node", communication_node)
@@ -173,9 +182,10 @@ def _compile_graph(all_tools, triage_node_fn):
     graph.add_conditional_edges(
         "triage_agent",
         _should_continue,
-        {"tool_node": "tool_node", "synthesis": "synthesis"},
+        {"tool_node": "tool_node", "synthesis": "checklist_gate"},
     )
     graph.add_edge("tool_node", "triage_agent")
+    graph.add_edge("checklist_gate", "synthesis")
     graph.add_edge("synthesis", "draft_reply")
     graph.add_conditional_edges(
         "draft_reply",
@@ -341,6 +351,57 @@ def get_workflow_state(thread_id: str) -> dict[str, Any] | None:
         return None
     except Exception:
         return None
+
+
+def stream_triage_workflow(
+    patient_message: str,
+    patient_id: str = "",
+    patient_email: str = "",
+    thread_id: str = "",
+    file_uri: str = "",
+    file_mime_type: str = "",
+    file_name: str = "",
+):
+    """
+    Prepare a streaming triage workflow.
+
+    Returns (app, initial_state, config, thread_id) — the caller drives
+    app.stream(initial_state, config, stream_mode="messages").
+    """
+    app = _get_compiled()
+    msg = (patient_message or "").strip()
+
+    if not thread_id:
+        thread_id = str(uuid.uuid4())
+
+    config = {"configurable": {"thread_id": thread_id}}
+
+    initial: TriageWorkflowState = {
+        "message": msg,
+        "patient_id": patient_id or "",
+        "patient_email": patient_email or "",
+        "messages": [HumanMessage(content=msg)],
+        "is_emergency": False,
+        "staff_approved": False,
+        "is_complete": False,
+        "file_uri": file_uri or None,
+        "file_mime_type": file_mime_type or None,
+        "file_name": file_name or None,
+    }
+
+    return app, initial, config, thread_id
+
+
+def resume_chat(thread_id: str, patient_answer: str):
+    """
+    Prepare a streaming resume after a checklist interrupt.
+
+    Returns (app, Command(resume=answer), config) — the caller drives
+    app.stream(command, config, stream_mode="messages").
+    """
+    app = _get_compiled()
+    config = {"configurable": {"thread_id": thread_id}}
+    return app, Command(resume=patient_answer), config
 
 
 def resume_workflow(

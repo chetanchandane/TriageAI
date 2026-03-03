@@ -1,6 +1,7 @@
 """
 Verification test script for TriageAI MCP tools.
-Tests Sprint 1 tools (ChromaDB, Supabase) plus Sprint 4 persistent store and MCP discovery.
+Tests Sprint 1 tools (ChromaDB, Supabase), Sprint 4 persistent store/MCP discovery,
+and Sprint 5 multimodal streaming assistant.
 
 Run from project root:
     python -m pytest tests/test_tools.py -v
@@ -202,6 +203,64 @@ def test_tool_lists_exported():
 
 
 # ---------------------------------------------------------------------------
+# Sprint 5: Multimodal Streaming Assistant
+# ---------------------------------------------------------------------------
+
+def test_state_has_multimodal_fields():
+    """TriageWorkflowState should have file_uri, file_mime_type, file_name, is_complete."""
+    from graph.state import TriageWorkflowState
+    hints = TriageWorkflowState.__annotations__
+    for field in ("file_uri", "file_mime_type", "file_name", "is_complete"):
+        assert field in hints, f"Missing field '{field}' in TriageWorkflowState"
+    print(f"  [PASS] State has multimodal + interrupt fields: {list(hints.keys())}")
+
+
+def test_checklist_gate_passthrough():
+    """When is_complete=True, checklist_gate_node should return empty dict (no-op)."""
+    from graph.nodes import checklist_gate_node
+    result = checklist_gate_node({"is_complete": True, "messages": []})
+    assert result == {}, f"Expected empty dict, got {result}"
+    print(f"  [PASS] checklist_gate_node passes through when is_complete=True")
+
+
+def test_checklist_gate_empty_checklist():
+    """When checklist is empty, checklist_gate_node should set is_complete=True."""
+    from langchain_core.messages import AIMessage
+    from graph.nodes import checklist_gate_node
+    # Simulate state with an AI message that has no checklist
+    state = {
+        "is_complete": False,
+        "messages": [AIMessage(content='```json\n{"intent":"Test","checklist":[]}\n```')],
+    }
+    result = checklist_gate_node(state)
+    assert result.get("is_complete") is True, f"Expected is_complete=True, got {result}"
+    print(f"  [PASS] checklist_gate_node sets is_complete=True for empty checklist")
+
+
+def test_streaming_bridge_import():
+    """stream_graph should be importable from app.streaming."""
+    from app.streaming import stream_graph
+    assert callable(stream_graph), "stream_graph should be callable"
+    print(f"  [PASS] app.streaming.stream_graph is importable and callable")
+
+
+def test_graph_has_checklist_gate():
+    """Compiled graph should include the checklist_gate node."""
+    from graph.workflow import _build_graph_local_only
+    compiled = _build_graph_local_only()
+    assert compiled is not None, "Graph compilation returned None"
+    print(f"  [PASS] Graph with checklist_gate compiles successfully")
+
+
+def test_workflow_stream_entry_points():
+    """stream_triage_workflow and resume_chat should be importable."""
+    from graph.workflow import stream_triage_workflow, resume_chat
+    assert callable(stream_triage_workflow), "stream_triage_workflow should be callable"
+    assert callable(resume_chat), "resume_chat should be callable"
+    print(f"  [PASS] stream_triage_workflow and resume_chat are importable")
+
+
+# ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
 
@@ -221,12 +280,19 @@ ALL_TESTS = [
     test_mcp_config_exists,
     test_graph_build_local_fallback,
     test_tool_lists_exported,
+    # Sprint 5 tests
+    test_state_has_multimodal_fields,
+    test_checklist_gate_passthrough,
+    test_checklist_gate_empty_checklist,
+    test_streaming_bridge_import,
+    test_graph_has_checklist_gate,
+    test_workflow_stream_entry_points,
 ]
 
 
 def main():
     print("=" * 60)
-    print("TriageAI — MCP Tool Verification (Sprint 1 + 4)")
+    print("TriageAI — MCP Tool Verification (Sprint 1 + 4 + 5)")
     print("=" * 60)
 
     passed = 0

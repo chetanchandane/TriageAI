@@ -1,8 +1,9 @@
 """
-TriageAI Streamlit app: login/register, patient portal, staff view, and HITL approvals.
+TriageAI Streamlit app: login/register, patient chat, staff view, and HITL approvals.
 Messages are tied to patient identity (patient_id, full_name) for personalization and staff identification.
-Sprint 4: Chroma MCP Server integration with nest_asyncio for async compatibility.
+Sprint 5: Streaming chat interface with multimodal vision and conversational interrupts.
 """
+import base64
 import os
 import sys
 
@@ -10,12 +11,19 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import nest_asyncio
-nest_asyncio.apply()
+try:
+    nest_asyncio.apply()
+except ValueError as e:
+    if "uvloop" in str(e) or "patch" in str(e).lower():
+        pass  # Streamlit uses uvloop; nest_asyncio can't patch it — app runs without nested async
+    else:
+        raise
 
 import streamlit as st
 from dotenv import load_dotenv
 
 from app.auth import register, login, get_current_user, is_supabase_configured
+from app.streaming import stream_graph
 from graph.state import get_patient_context, set_patient_context, clear_patient_context
 from app.messages_store import (
     save_message,
@@ -64,6 +72,15 @@ if "user_id" not in st.session_state:
     st.session_state.user_id = None
 if "selected_message_id" not in st.session_state:
     st.session_state.selected_message_id = None
+# Sprint 5: streaming chat state
+if "chat_messages" not in st.session_state:
+    st.session_state.chat_messages = []
+if "chat_thread_id" not in st.session_state:
+    st.session_state.chat_thread_id = None
+if "pending_interrupt" not in st.session_state:
+    st.session_state.pending_interrupt = None
+if "uploaded_file_data" not in st.session_state:
+    st.session_state.uploaded_file_data = None
 
 
 def render_login_register():
@@ -127,70 +144,188 @@ def render_login_register():
                         st.info("If using Supabase with email confirmation, check your inbox first.")
 
 
+def _process_uploaded_file(uploaded_file):
+    """Encode an uploaded file as a base64 data URI."""
+    raw = uploaded_file.read()
+    b64 = base64.b64encode(raw).decode("utf-8")
+    mime = uploaded_file.type or "application/octet-stream"
+    return {
+        "uri": f"data:{mime};base64,{b64}",
+        "mime": mime,
+        "name": uploaded_file.name,
+    }
+
+
+def _stream_and_display(app, inputs, config, patient):
+    """Drive stream_graph() and render tokens progressively."""
+    from graph.workflow import get_workflow_state
+
+    full_response = ""
+    msg_placeholder = st.chat_message("assistant")
+    text_area = msg_placeholder.empty()
+    status_area = msg_placeholder.empty()
+
+    for event in stream_graph(app, inputs, config):
+        if event["type"] == "token":
+            full_response += event["content"]
+            text_area.markdown(full_response + " |")
+        elif event["type"] == "status":
+            status_area.caption(event["content"])
+        elif event["type"] == "interrupt":
+            # Render final text so far (without cursor)
+            if full_response:
+                text_area.markdown(full_response)
+            status_area.empty()
+            # Store the interrupt question and rerun so chat_input re-renders
+            st.session_state.pending_interrupt = event["content"]
+            st.session_state.chat_messages.append(
+                {"role": "assistant", "content": event["content"]}
+            )
+            st.rerun()
+            return
+        elif event["type"] == "error":
+            text_area.markdown(full_response or "")
+            status_area.error(event["content"])
+            return
+        elif event["type"] == "done":
+            pass
+
+    # Render final text (without cursor)
+    if full_response:
+        text_area.markdown(full_response)
+    status_area.empty()
+
+    # Extract final results from the workflow state
+    thread_id = config["configurable"]["thread_id"]
+    state = get_workflow_state(thread_id)
+    if state:
+        triage_result = state.get("triage_result") or {}
+        safety_result = state.get("safety_result") or {}
+
+        # Embed thread_id and hitl_status
+        triage_result["thread_id"] = thread_id
+        hitl_status = state.get("hitl_status")
+        if hitl_status:
+            triage_result["hitl_status"] = hitl_status
+        else:
+            triage_result["hitl_status"] = "pending_review"
+            triage_result["draft_reply"] = state.get("draft_reply", "")
+
+        # Safety warning
+        if safety_result.get("is_potential_emergency"):
+            st.warning(
+                "This message was flagged as a potential emergency. "
+                "Staff will prioritize it. If this is a life-threatening "
+                "emergency, please call 911 or go to the nearest ER."
+            )
+
+        # Save to message store
+        save_message(
+            user_id=patient.user_id,
+            patient_id=patient.patient_id,
+            full_name=patient.full_name,
+            email=patient.email,
+            content=st.session_state.chat_messages[0]["content"] if st.session_state.chat_messages else "",
+            triage_result=triage_result,
+        )
+
+        # Show triage summary
+        summary = triage_result.get("summary", "")
+        urgency = triage_result.get("urgency", "")
+        if summary or urgency:
+            result_text = f"**Triage complete.** Urgency: {urgency}. {summary}"
+            st.session_state.chat_messages.append(
+                {"role": "assistant", "content": result_text}
+            )
+
+    # Reset chat thread for next conversation
+    st.session_state.chat_thread_id = None
+    st.session_state.pending_interrupt = None
+    st.session_state.uploaded_file_data = None
+
+
 def render_patient_portal():
-    """What the patient sees: submit message and own history only."""
+    """Streaming chat interface for the patient (Sprint 5)."""
     patient = get_patient_context(st.session_state)
     if not patient:
         return
 
-    st.subheader("Send a message")
-    with st.form("message_form"):
-        content = st.text_area("Your message", height=120, placeholder="Describe your concern or request...")
-        if st.form_submit_button("Submit"):
-            if not (content or "").strip():
-                st.error("Please enter a message.")
+    # --- Sidebar: file upload ---
+    with st.sidebar:
+        st.markdown("#### Attach a file")
+        uploaded = st.file_uploader(
+            "Upload an image or PDF",
+            type=["jpg", "jpeg", "png", "pdf"],
+            key="patient_file_upload",
+        )
+        if uploaded:
+            file_data = _process_uploaded_file(uploaded)
+            st.session_state.uploaded_file_data = file_data
+            if file_data["mime"].startswith("image/"):
+                st.image(uploaded, caption=file_data["name"], use_container_width=True)
             else:
-                msg = content.strip()
-                # LangGraph workflow: Safety -> Triage -> Draft Reply (with HITL)
-                try:
-                    safety_result_dict, triage_result = _run_workflow(
-                        msg,
-                        patient_id=patient.patient_id,
-                        patient_email=patient.email,
-                    )
-                except Exception as e:
-                    st.error(f"Workflow failed: {e}")
-                    return
-                safety_flagged = safety_result_dict.get("is_potential_emergency", False)
-                if safety_flagged:
-                    st.warning("⚠️ **Safety screen:** This message was flagged as a potential emergency. Staff will prioritize it. If this is a life-threatening emergency, please call 911 or go to the nearest ER.")
-                save_message(
-                    user_id=patient.user_id,
-                    patient_id=patient.patient_id,
-                    full_name=patient.full_name,
-                    email=patient.email,
-                    content=msg,
-                    triage_result=triage_result,
-                )
-
-                # Show appropriate confirmation based on HITL status
-                hitl_status = triage_result.get("hitl_status", "")
-                if hitl_status == "pending_review":
-                    st.success("Message submitted. A staff member will review and respond shortly.")
-                elif hitl_status == "auto_completed":
-                    st.success("Message submitted and processed. Check your email for a response.")
-                else:
-                    st.success("Message submitted. Staff will review it.")
-
-                if triage_result:
-                    with st.expander("Triage summary"):
-                        # Hide internal fields from patient view
-                        display_result = {k: v for k, v in triage_result.items()
-                                          if k not in ("thread_id", "hitl_status", "draft_reply")}
-                        st.json(display_result)
+                st.caption(f"Attached: {file_data['name']}")
+            if st.button("Clear attachment", key="clear_attachment"):
+                st.session_state.uploaded_file_data = None
                 st.rerun()
 
-    st.subheader("Your message history")
-    my_messages = get_messages_for_patient(patient.user_id)
-    if not my_messages:
-        st.caption("No messages yet.")
-    else:
-        for m in my_messages:
-            with st.container():
-                st.markdown(f"**{m.get('created_at', '')[:19]}** — {m.get('content', '')[:100]}...")
-                if m.get("triage_result"):
-                    st.caption(f"Urgency: {m['triage_result'].get('urgency', 'N/A')} · {m['triage_result'].get('summary', '')}")
-                st.divider()
+    # --- Chat history ---
+    for msg in st.session_state.chat_messages:
+        st.chat_message(msg["role"]).markdown(msg["content"])
+
+    # --- Show pending interrupt as a prompt ---
+    if st.session_state.pending_interrupt:
+        st.info("The AI needs more information. Please reply below.")
+
+    # --- Chat input ---
+    user_input = st.chat_input("Describe your concern or ask a question...")
+
+    if user_input:
+        # Display user message
+        st.chat_message("user").markdown(user_input)
+        st.session_state.chat_messages.append({"role": "user", "content": user_input})
+
+        if st.session_state.pending_interrupt:
+            # Resume from checklist interrupt
+            thread_id = st.session_state.chat_thread_id
+            st.session_state.pending_interrupt = None
+            if thread_id:
+                try:
+                    from graph.workflow import resume_chat
+                    app, command, config = resume_chat(thread_id, user_input)
+                    _stream_and_display(app, command, config, patient)
+                except Exception as e:
+                    st.error(f"Resume failed: {e}")
+        else:
+            # New workflow
+            try:
+                from graph.workflow import stream_triage_workflow
+                file_data = st.session_state.uploaded_file_data or {}
+                app, initial, config, thread_id = stream_triage_workflow(
+                    patient_message=user_input,
+                    patient_id=patient.patient_id,
+                    patient_email=patient.email,
+                    file_uri=file_data.get("uri", ""),
+                    file_mime_type=file_data.get("mime", ""),
+                    file_name=file_data.get("name", ""),
+                )
+                st.session_state.chat_thread_id = thread_id
+                _stream_and_display(app, initial, config, patient)
+            except Exception as e:
+                st.error(f"Workflow failed: {e}")
+
+    # --- Message history (collapsible) ---
+    with st.expander("Your message history"):
+        my_messages = get_messages_for_patient(patient.user_id)
+        if not my_messages:
+            st.caption("No messages yet.")
+        else:
+            for m in my_messages:
+                with st.container():
+                    st.markdown(f"**{m.get('created_at', '')[:19]}** -- {m.get('content', '')[:100]}...")
+                    if m.get("triage_result"):
+                        st.caption(f"Urgency: {m['triage_result'].get('urgency', 'N/A')} | {m['triage_result'].get('summary', '')}")
+                    st.divider()
 
 
 def _urgency_emoji(urgency: str) -> str:
@@ -412,9 +547,9 @@ def main():
         st.rerun()
         return
 
-    tab_patient, tab_staff, tab_approvals = st.tabs(["Patient view", "Staff view", "Pending Approvals"])
+    tab_patient, tab_staff, tab_approvals = st.tabs(["Patient Chat", "Staff view", "Pending Approvals"])
     with tab_patient:
-        st.caption("What the patient sees: send messages and view your own history.")
+        st.caption("Chat with the AI triage assistant. Attach images for visual assessment.")
         render_patient_portal()
     with tab_staff:
         st.caption("What staff sees: all patient messages grouped by patient.")

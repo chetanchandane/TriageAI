@@ -17,6 +17,7 @@ from dotenv import load_dotenv
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.tools import tool
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langgraph.types import interrupt
 
 from graph.state import TriageWorkflowState
 
@@ -98,15 +99,72 @@ Do NOT include the JSON in tool-calling responses — only in your final answer 
 # Node: Safety (Gatekeeper)
 # ---------------------------------------------------------------------------
 
+def _visual_safety_screen(file_uri: str, file_mime: str, msg: str) -> dict | None:
+    """Use Gemini vision to check an attached image for emergency red flags.
+
+    Returns a SafetyResult-like dict if emergency detected, else None.
+    """
+    api_key = os.environ.get("LLM_GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+    if not api_key:
+        return None
+
+    try:
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
+            google_api_key=api_key,
+        )
+        prompt = (
+            "You are a medical safety screener. Examine this image for emergency "
+            "red flags: active bleeding, respiratory distress, cyanosis (blue lips/skin), "
+            "visible trauma/fractures, severe burns, or signs of anaphylaxis.\n\n"
+            f"Patient message: {msg}\n\n"
+            "If you see ANY emergency red flag, respond with EXACTLY: "
+            "EMERGENCY: <brief reason>\n"
+            "If the image does NOT show an emergency, respond with EXACTLY: SAFE"
+        )
+        content = [
+            {"type": "text", "text": prompt},
+            {"type": "image_url", "image_url": {"url": file_uri}},
+        ]
+        response = llm.invoke([HumanMessage(content=content)])
+        text = (response.content or "").strip()
+
+        if text.upper().startswith("EMERGENCY"):
+            reason = text.split(":", 1)[1].strip() if ":" in text else "Visual emergency detected"
+            return {
+                "is_potential_emergency": True,
+                "reason": reason,
+                "triggered_by": "visual_screen",
+            }
+    except Exception:
+        pass
+
+    return None
+
+
 def safety_node(state: TriageWorkflowState) -> dict[str, Any]:
     """
     Run the two-layer safety screen (rules + LLM).
     Sets is_emergency and safety_result. If emergency, the graph short-circuits.
+    Sprint 5: also runs visual safety screen on attached images.
     """
     from agents.safety_agent import screen_for_emergency
 
     msg = (state.get("message") or "").strip()
     result = screen_for_emergency(msg)
+
+    # Sprint 5: if text screen didn't flag emergency and an image is attached,
+    # run visual safety screen
+    if not result.is_potential_emergency:
+        file_uri = state.get("file_uri")
+        file_mime = state.get("file_mime_type") or ""
+        if file_uri and file_mime.startswith("image/"):
+            visual = _visual_safety_screen(file_uri, file_mime, msg)
+            if visual and visual.get("is_potential_emergency"):
+                return {
+                    "safety_result": visual,
+                    "is_emergency": True,
+                }
 
     return {
         "safety_result": result.model_dump(),
@@ -159,9 +217,26 @@ def _triage_agent_node_impl(state: TriageWorkflowState, tools=None) -> dict[str,
             )
 
         system_msg = SystemMessage(content=TRIAGE_SYSTEM_PROMPT)
-        human_msg = HumanMessage(
-            content=f"{chr(10).join(context_parts)}\n\nPatient message:\n{msg}"
-        )
+
+        # Sprint 5: multimodal content for image attachments
+        file_uri = state.get("file_uri")
+        file_mime = state.get("file_mime_type") or ""
+        context_text = f"{chr(10).join(context_parts)}\n\nPatient message:\n{msg}"
+
+        if file_uri and file_mime.startswith("image/"):
+            human_content = [
+                {"type": "text", "text": context_text},
+                {"type": "image_url", "image_url": {"url": file_uri}},
+                {"type": "text", "text": "The patient attached an image. Describe what you observe and factor it into your triage assessment."},
+            ]
+            human_msg = HumanMessage(content=human_content)
+        elif file_uri and "pdf" in file_mime:
+            human_msg = HumanMessage(
+                content=f"{context_text}\n\n[Patient attached a PDF file: {state.get('file_name', 'document.pdf')}]"
+            )
+        else:
+            human_msg = HumanMessage(content=context_text)
+
         messages = [system_msg, human_msg]
 
     response = model.invoke(messages)
@@ -338,6 +413,44 @@ def communication_node(state: TriageWorkflowState) -> dict[str, Any]:
     return {
         "staff_approved": True,
         "hitl_status": "approved",
+    }
+
+
+# ---------------------------------------------------------------------------
+# Node: Checklist Gate (Sprint 5 — conversational interrupt for missing info)
+# ---------------------------------------------------------------------------
+
+def checklist_gate_node(state: TriageWorkflowState) -> dict[str, Any]:
+    """
+    Inspect the triage agent's checklist for missing information.
+    If items are present and is_complete is False, interrupt to ask the patient.
+    On resume, the patient's answer is appended and the graph continues to synthesis.
+    """
+    if state.get("is_complete"):
+        return {}
+
+    # Parse the last AI message for a checklist
+    last_ai = _extract_ai_content(state.get("messages") or [])
+    parsed = _parse_triage_json(last_ai)
+    checklist = [item for item in parsed.get("checklist", []) if item and item.strip()]
+
+    if not checklist:
+        return {"is_complete": True}
+
+    # Build a follow-up question from checklist items
+    if len(checklist) == 1:
+        question = checklist[0]
+    else:
+        question = "I need a bit more information:\n" + "\n".join(
+            f"- {item}" for item in checklist[:3]
+        )
+
+    # Pause the graph — interrupt() returns the patient's answer on resume
+    patient_answer = interrupt(question)
+
+    return {
+        "messages": [HumanMessage(content=str(patient_answer))],
+        "is_complete": True,
     }
 
 

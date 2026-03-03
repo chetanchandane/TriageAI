@@ -41,6 +41,14 @@ class TriageWorkflowState(TypedDict, total=False):
     staff_approved: bool        # For Sprint 3 HITL
     hitl_status: Optional[str]  # "pending_review", "approved", "auto_completed"
 
+    # --- Multimodal metadata (Sprint 5) ---
+    file_uri: Optional[str]         # base64 data URI e.g. "data:image/jpeg;base64,..."
+    file_mime_type: Optional[str]   # "image/jpeg", "image/png", "application/pdf"
+    file_name: Optional[str]        # original filename for display
+
+    # --- Conversational interrupt control (Sprint 5) ---
+    is_complete: bool               # True when all checklist items are satisfied
+
 
 # ---------------------------------------------------------------------------
 # Streamlit session helpers (unchanged from Sprint 1)
