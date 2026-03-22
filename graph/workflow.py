@@ -82,6 +82,18 @@ def _should_continue(state: TriageWorkflowState) -> str:
     return "synthesis"
 
 
+def _route_after_checklist(state: TriageWorkflowState) -> str:
+    """After checklist gate:
+    - is_complete=True means the triage agent produced no more checklist items
+      → proceed to synthesis (conversation done).
+    - is_complete not set means the patient just answered a question and the agent
+      should re-evaluate → loop back to triage_agent_node.
+    """
+    if state.get("is_complete"):
+        return "synthesis"
+    return "triage_agent"
+
+
 def _route_after_draft(state: TriageWorkflowState) -> str:
     """Route based on urgency after draft reply is generated.
     - LOW → auto_communicate (no staff review needed, fully automated).
@@ -185,7 +197,11 @@ def _compile_graph(all_tools, triage_node_fn):
         {"tool_node": "tool_node", "synthesis": "checklist_gate"},
     )
     graph.add_edge("tool_node", "triage_agent")
-    graph.add_edge("checklist_gate", "synthesis")
+    graph.add_conditional_edges(
+        "checklist_gate",
+        _route_after_checklist,
+        {"synthesis": "synthesis", "triage_agent": "triage_agent"},
+    )
     graph.add_edge("synthesis", "draft_reply")
     graph.add_conditional_edges(
         "draft_reply",

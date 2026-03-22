@@ -448,9 +448,11 @@ def checklist_gate_node(state: TriageWorkflowState) -> dict[str, Any]:
     # Pause the graph — interrupt() returns the patient's answer on resume
     patient_answer = interrupt(question)
 
+    # Return the patient's answer WITHOUT marking is_complete=True.
+    # The conditional edge routes back to triage_agent_node so it re-evaluates
+    # with the new context and decides whether more info is still needed.
     return {
         "messages": [HumanMessage(content=str(patient_answer))],
-        "is_complete": True,
     }
 
 
