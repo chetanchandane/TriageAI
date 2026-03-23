@@ -110,7 +110,7 @@ def _route_after_draft(state: TriageWorkflowState) -> str:
 
 def _auto_communicate_node(state: TriageWorkflowState) -> dict[str, Any]:
     """Send draft reply automatically for LOW urgency. No staff review needed."""
-    from mcp.tools.communication import send_resolution_email
+    from mcp_tools.tools.communication import send_resolution_email
 
     patient_email = state.get("patient_email", "")
     draft = state.get("draft_reply", "")
@@ -163,12 +163,18 @@ async def _init_mcp_tools() -> list:
     return _mcp_tools
 
 
+_CHECKPOINT_DB = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "data",
+    "checkpoints.db",
+)
+
+
 def _compile_graph(all_tools, triage_node_fn):
     """Shared graph compilation logic used by both MCP and local-only builders."""
     global _checkpointer
     from langgraph.graph import StateGraph, END
     from langgraph.prebuilt import ToolNode
-    from langgraph.checkpoint.memory import MemorySaver
 
     graph = StateGraph(TriageWorkflowState)
 
@@ -212,7 +218,23 @@ def _compile_graph(all_tools, triage_node_fn):
     graph.add_edge("communication_node", END)
 
     # --- Compile with persistence and HITL interrupt ---
-    _checkpointer = MemorySaver()
+    # SqliteSaver persists thread state to disk so HITL thread_ids survive
+    # app restarts. Falls back to in-memory MemorySaver if sqlite unavailable.
+    try:
+        import sqlite3
+        from langgraph.checkpoint.sqlite import SqliteSaver
+        conn = sqlite3.connect(_CHECKPOINT_DB, check_same_thread=False)
+        _checkpointer = SqliteSaver(conn)
+        _checkpointer.setup()
+    except Exception:
+        from langgraph.checkpoint.memory import MemorySaver
+        import warnings
+        warnings.warn(
+            "SqliteSaver unavailable — falling back to MemorySaver (state lost on restart). "
+            "Install langgraph-checkpoint-sqlite to persist HITL threads.",
+            stacklevel=2,
+        )
+        _checkpointer = MemorySaver()
     return graph.compile(
         checkpointer=_checkpointer,
         interrupt_before=["communication_node"],
@@ -239,11 +261,25 @@ def build_graph():
     (missing config, server not installed, etc.), falls back to the
     local-only graph using TRIAGE_TOOLS.
     """
+    import warnings
+
     if os.path.exists(MCP_CONFIG_PATH):
         try:
             return asyncio.run(build_graph_async())
-        except Exception:
-            pass
+        except Exception as e:
+            warnings.warn(
+                f"MCP tool discovery failed ({type(e).__name__}: {e}). "
+                "Falling back to local-only tools (search_hospital_policy, "
+                "get_patient_history, get_available_slots).",
+                stacklevel=2,
+            )
+    else:
+        warnings.warn(
+            f"MCP config not found at {MCP_CONFIG_PATH}. "
+            "Using local-only tools.",
+            stacklevel=2,
+        )
+
     return _build_graph_local_only()
 
 

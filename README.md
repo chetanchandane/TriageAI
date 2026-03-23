@@ -15,7 +15,7 @@ Traditional patient portals often lead to administrative bottlenecks. This syste
 | Layer | Technology |
 |-------|-----------|
 | **Orchestration** | LangGraph (cyclic agentic state machine with conditional routing + HITL interrupts) |
-| **Persistence** | LangGraph `MemorySaver` checkpointer (thread-based state recovery for HITL) |
+| **Persistence** | LangGraph `SqliteSaver` checkpointer at `./data/checkpoints.db` (thread-based state recovery for HITL, survives restarts) |
 | **Reasoning** | Gemini 2.5 Flash via `langchain-google-genai` (tool-calling + structured output + vision) |
 | **Safety** | Calibrated regex patterns (crisis-modifier gated) + LLM fallback with negative constraints |
 | **RAG** | ChromaDB (`PersistentClient` at `./data/vector_store`); Chroma MCP Server via `langchain-mcp-adapters` with local fallback |
@@ -54,15 +54,15 @@ triage-ai/
 │   ├── triage_agent.py           # Intent/urgency classification (Gemini)
 │   └── policy_agent.py           # RAG retrieval + draft reply generation (ChromaDB)
 ├── graph/                        # Orchestration Layer (LangGraph)
-│   ├── workflow.py               # Cyclic graph + MemorySaver persistence + HITL interrupt/resume + streaming entry points
+│   ├── workflow.py               # Cyclic graph + SqliteSaver persistence + HITL interrupt/resume + streaming entry points
 │   ├── nodes.py                  # Node functions (safety, triage_agent, checklist_gate, synthesis, draft_reply, communication) + tool wrappers
 │   └── state.py                  # TriageWorkflowState (with add_messages, hitl_status, multimodal fields) + PatientContext
-├── mcp/                          # Tool & Context Layer (MCP)
+├── mcp_tools/                    # Tool & Context Layer (MCP)
 │   ├── server.py                 # MCP server (exposes all tools)
 │   └── tools/
 │       ├── database_tools.py     # get_patient_history, get_available_slots (Supabase)
 │       ├── rag_tools.py          # search_hospital_policy (ChromaDB wrapper)
-│       └── communication.py      # send_resolution_email (mock, future: real provider)
+│       └── communication.py      # send_resolution_email (Resend, with mock fallback)
 ├── schemas/                      # Data Models
 │   └── schemas.py                # Pydantic: SafetyResult, TriageResult
 ├── data/

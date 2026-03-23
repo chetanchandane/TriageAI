@@ -32,7 +32,7 @@ load_dotenv()
 def get_patient_history(patient_id: str) -> str:
     """Fetch the patient's medical history from Supabase given their patient_id.
     Returns the medical_history string, or empty string if not found."""
-    from mcp.tools.database_tools import get_patient_history as _get
+    from mcp_tools.tools.database_tools import get_patient_history as _get
     result = _get(patient_id)
     return result if result else "No medical history on file."
 
@@ -42,7 +42,7 @@ def search_hospital_policy(query: str) -> str:
     """Search hospital/clinic policies using RAG (ChromaDB).
     Input a query describing what policy to look up.
     Returns relevant policy snippets."""
-    from mcp.tools.rag_tools import search_hospital_policy as _search
+    from mcp_tools.tools.rag_tools import search_hospital_policy as _search
     chunks = _search(query, top_k=3)
     return "\n---\n".join(chunks) if chunks else "No relevant policies found."
 
@@ -51,7 +51,7 @@ def search_hospital_policy(query: str) -> str:
 def get_available_slots() -> str:
     """Get available appointment scheduling slots.
     Returns a list of available time slots."""
-    from mcp.tools.database_tools import get_available_slots as _get
+    from mcp_tools.tools.database_tools import get_available_slots as _get
     slots = _get()
     return ", ".join(slots)
 
@@ -69,26 +69,38 @@ TRIAGE_TOOLS = [get_patient_history, search_hospital_policy, get_available_slots
 
 TRIAGE_SYSTEM_PROMPT = """You are a professional Medical Triage Agent for a clinic patient portal.
 
-Your job is to analyze a patient's message and produce a clinical triage assessment. You have access to tools that let you:
+Your job is to have a thorough conversation with the patient to fully understand their situation before handing the case to staff. You are the first point of contact — staff should only receive a case once you have a complete, accurate picture.
+
+You have access to tools that let you:
 1. Look up the patient's medical history by their patient_id.
 2. Search clinic policies (refill rules, appointment booking, billing, emergency protocols, etc.) using the available policy search tool.
 3. Check available appointment time slots.
 
 ## Workflow
 1. Read the patient's message carefully.
-2. If you need the patient's medical history, use the patient history tool with their patient_id.
-3. If the message relates to clinic policies (refills, appointments, billing, referrals, lab results), use the available policy search tool with a relevant query.
-4. If the patient asks about scheduling, use the available slots tool.
-5. You may call multiple tools if the message has multiple intents.
-6. After gathering all necessary context, produce your final triage assessment.
+2. Use tools as needed — patient history, policy search, available slots.
+3. You may call multiple tools if the message has multiple intents.
+4. Identify what information is missing or unclear before finalizing your assessment.
+5. If critical details are missing, list them in the `checklist` field. The system will ask the patient and bring their answers back to you. You will then re-evaluate with the new context.
+6. Only produce a final assessment with an empty `checklist` when you genuinely have everything you need.
+
+## Checklist Rules — read carefully
+The `checklist` field drives the conversation. Use it aggressively when information is thin:
+- **Clinical questions / symptoms:** Always ask about duration ("How long has this been going on?"), severity ("On a scale of 1–10?"), progression ("Is it getting better or worse?"), and any associated symptoms.
+- **Refill requests:** Confirm the medication name, dose, and when they last took it. Ask if they have experienced any side effects recently.
+- **Appointments:** Clarify what the appointment is for and whether it is urgent or routine.
+- **Billing / admin:** Ask for enough detail to route accurately (invoice number, service date, specific concern).
+- **Vague messages:** If the patient's message is ambiguous, ask a clarifying question before attempting to classify intent.
+
+Do NOT leave the checklist empty simply because a classification is possible. Leave it empty only when you are confident the case is complete enough for staff to act on without needing to chase the patient for more information.
 
 ## Final Assessment Format
-When you have enough information, respond with your final assessment as a JSON object with these fields:
+Respond with your assessment as a JSON object with these fields:
 - "intent": The primary reason for the message (e.g., "Appointment", "Refill", "Clinical Question", "Billing", "Multiple")
 - "confidence": A float between 0 and 1
 - "urgency": One of "EMERGENCY", "HIGH", "NORMAL", "LOW"
-- "summary": A 1-sentence summary of the patient's request
-- "checklist": A list of any missing information needed from the patient
+- "summary": A 1-sentence summary of the patient's fully understood request
+- "checklist": List of questions still needed from the patient — empty list [] only when the case is complete
 - "recommended_queue": The staff department (e.g., "Nursing", "Pharmacy", "Billing", "Front Desk")
 
 Wrap your final JSON in ```json ... ``` markers so it can be parsed.
@@ -166,9 +178,15 @@ def safety_node(state: TriageWorkflowState) -> dict[str, Any]:
                     "is_emergency": True,
                 }
 
+    # Only short-circuit the graph when BOTH rule and LLM confirmed the emergency.
+    # Single-layer flags (rules_only, llm_only) route through the triage agent
+    # with the safety warning visible — it uses patient history to make a
+    # fully-informed urgency decision rather than blindly escalating.
+    is_confirmed_emergency = result.triggered_by == "rules+llm"
+
     return {
         "safety_result": result.model_dump(),
-        "is_emergency": result.is_potential_emergency,
+        "is_emergency": is_confirmed_emergency,
     }
 
 
@@ -398,7 +416,7 @@ def communication_node(state: TriageWorkflowState) -> dict[str, Any]:
     so staff can review and edit the draft before it is sent.
     For LOW urgency, this node runs automatically.
     """
-    from mcp.tools.communication import send_resolution_email
+    from mcp_tools.tools.communication import send_resolution_email
 
     patient_email = state.get("patient_email", "")
     draft_reply = state.get("draft_reply", "")

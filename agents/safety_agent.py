@@ -1,7 +1,20 @@
 """
-Safety Agent: screen for potential emergencies before triage.
-Target: 0% false negatives — when in doubt, flag as potential emergency.
-Uses rule-based keywords first (deterministic), then a conservative LLM check.
+Safety Agent: two-stage confirmation screen for potential emergencies.
+
+Stage 1 — Rule-based scan (deterministic, high-recall, no API call).
+Stage 2 — LLM confirmation or general scan (context-aware, reduces false positives).
+
+Confirmation logic:
+  - Rule fires AND LLM confirms  → triggered_by="rules+llm"  (confirmed emergency)
+  - Rule fires, LLM disagrees    → triggered_by="rules_only" (suspected, warn triage agent)
+  - No rule, LLM flags           → triggered_by="llm_only"   (suspected, warn triage agent)
+  - Neither                      → triggered_by="none"        (clear)
+
+Only "rules+llm" short-circuits the graph. Suspected cases route through the
+triage agent with the safety flag as context — the agent uses patient history
+and policy tools to make a fully-informed urgency decision.
+
+Target: 0% false negatives (nothing silently dropped) with reduced false positives.
 """
 import os
 import re
@@ -14,16 +27,19 @@ from schemas.schemas import SafetyResult
 
 load_dotenv()
 
+
 # ---------------------------------------------------------------------------
-# Rule-based layer: explicit emergency signals (high recall to avoid false negatives)
+# Rule-based layer — high-recall patterns (Stage 1)
 # ---------------------------------------------------------------------------
+
 EMERGENCY_PATTERNS = [
-    # Cardiac / chest — require crisis modifiers to avoid flagging routine mentions
+    # Cardiac / chest
     r"\b(sudden|crushing|severe|sharp|intense)\s+chest\s+pain\b",
     r"\bheart\s+attack\b",
     r"\bheart\s+(is\s+)?racing\s+with\s+(dizziness|fainting|shortness\s+of\s+breath|chest\s+pain)\b",
     r"\b(severe|sharp|crushing)\s+chest\b",
-    r"\bpain\s+(in|radiating\s+to)\s+(my\s+)?(arm|jaw|back)\b",
+    # Pain radiating — requires acute modifier to avoid flagging "back pain for years"
+    r"\b(sudden|shooting|severe|radiating)\s+pain\s+(in|to)\s+(my\s+)?(arm|jaw|left\s+arm)\b",
     # Respiratory
     r"\b(can'?t|cannot|can\s+not)\s+breathe\b",
     r"\bdifficulty\s+breathing\b",
@@ -62,10 +78,7 @@ COMPILED_PATTERNS = [re.compile(p, re.IGNORECASE) for p in EMERGENCY_PATTERNS]
 
 
 def _rule_based_screen(text: str) -> Optional[str]:
-    """
-    Return the first matching pattern description if any rule matches, else None.
-    Used for deterministic, high-recall screening.
-    """
+    """Return the first matching pattern if any rule matches, else None."""
     if not (text or "").strip():
         return None
     for i, pat in enumerate(COMPILED_PATTERNS):
@@ -74,85 +87,171 @@ def _rule_based_screen(text: str) -> Optional[str]:
     return None
 
 
-@traceable
-def _llm_safety_screen(text: str) -> SafetyResult:
-    """
-    Conservative LLM check: bias toward flagging to minimize false negatives.
-    Only used when rule-based layer did not already flag.
-    """
+# ---------------------------------------------------------------------------
+# LLM layer — two focused prompts (Stage 2)
+# ---------------------------------------------------------------------------
+
+# Used when a rule already fired: confirm whether this is truly acute/active
+_CONFIRM_PROMPT = """You are a medical emergency verification system.
+
+A keyword rule flagged the following patient message for a possible emergency. Assess whether this describes an ACTIVE, CURRENT, LIFE-THREATENING situation — or a non-acute mention (chronic condition, past medical history, mild/stable symptom, or incidental reference).
+
+Flagged pattern: {rule_reason}
+
+Confirm as emergency (true) ONLY if ALL of the following apply:
+- The event is happening RIGHT NOW or within the last few hours.
+- The onset is sudden or the severity is clearly acute.
+- The language does not suggest a chronic, stable, or historical context.
+
+Do NOT confirm (false) if:
+- The symptom has been present for more than 24–48 hours without escalation.
+- The patient uses language like "mild", "occasional", "getting better", "I used to", "last year", "I have a history of", "for the past few weeks/months".
+- It is a known managed chronic condition (epilepsy, asthma, chronic back pain, etc.).
+- It describes a past event or a routine follow-up, not an acute crisis.
+
+Patient message:
+{text}
+"""
+
+# Used when no rule fired: general scan, balanced (not "when in doubt flag")
+_GENERAL_PROMPT = """You are a medical safety screener.
+
+Decide if this patient message describes a situation requiring immediate emergency care (911 or ER right now).
+
+Flag as emergency (true) ONLY if the message describes:
+- A sudden, acute, severe symptom: heart attack, stroke, severe bleeding, inability to breathe, overdose, anaphylaxis, loss of consciousness, or suicidal intent with a plan.
+
+Do NOT flag (false) if:
+- The message describes chronic, stable, or mild symptoms.
+- It is a refill, appointment, billing, or administrative request.
+- It mentions a symptom without clear urgency or acuity ("some back pain", "mild headache", "tired lately", "chest discomfort when exercising for months").
+- The patient is describing medical history, not an active crisis.
+- When genuinely uncertain about severity, answer false — the triage agent will assess further.
+
+Patient message:
+{text}
+"""
+
+
+def _get_genai_client():
+    """Return a configured Gemini client, or None if unavailable."""
+    api_key = os.environ.get("LLM_GEMINI_API_KEY")
+    if not api_key:
+        return None
     try:
         from google import genai
-
-        client = genai.Client(api_key=os.environ.get("LLM_GEMINI_API_KEY"))
-        if not client or not os.environ.get("LLM_GEMINI_API_KEY"):
-            # No API key: default to not flagging (rules already ran)
-            return SafetyResult(
-                is_potential_emergency=False,
-                reason="LLM not configured; rule-based screen did not find emergency signals.",
-                triggered_by="none",
-            )
+        return genai.Client(api_key=api_key)
     except ImportError:
+        return None
+
+
+def _llm_call(prompt: str, triggered_by_value: str) -> SafetyResult:
+    """
+    Run a single Gemini structured-output call with the given prompt.
+    On failure returns is_potential_emergency=False — rules already ran and
+    would have caught rule-based emergencies; an LLM outage should not create
+    false positives.
+    """
+    client = _get_genai_client()
+    if not client:
         return SafetyResult(
             is_potential_emergency=False,
-            reason="LLM not available; rule-based screen did not find emergency signals.",
+            reason="LLM not configured; rule-based screen did not find emergency signals.",
             triggered_by="none",
         )
-
-    PROMPT = """You are a medical safety screener. Your ONLY job is to decide: could this message possibly describe a life-threatening or emergency situation?
-
-RULES:
-- If there is ANY reasonable chance the situation could be life-threatening (heart attack, stroke, severe bleeding, difficulty breathing, overdose, suicidal intent, severe allergic reaction, unconscious, choking, etc.), answer is_potential_emergency: true.
-- When in doubt, answer true. We prefer false positives over missing a real emergency.
-- Only answer false if the message is clearly non-urgent (e.g. refill, appointment, general question with no acute symptoms).
-
-NEGATIVE CONSTRAINTS — Do NOT flag these as emergencies:
-- Routine medication refill requests (e.g. "I need to refill my blood pressure medication").
-- Appointment scheduling or rescheduling requests.
-- Billing, insurance, or administrative questions.
-- Chronic or stable symptoms that have persisted for more than 1 week without worsening (e.g. "I've had mild back pain for a few weeks").
-- General health questions or follow-ups (e.g. "When should I come in for my annual checkup?").
-- Mild, non-acute symptoms described without urgency modifiers (e.g. "I have some chest discomfort when I exercise that's been going on for months" is NOT the same as "I'm having sudden crushing chest pain right now").
-
-Message to screen:
-"""
     try:
+        from schemas.schemas import SafetyResult as _SR
         response = client.models.generate_content(
             model="gemini-2.5-flash",
-            contents=PROMPT + text.strip()[:2000],
+            contents=prompt,
             config={
                 "response_mime_type": "application/json",
-                "response_schema": SafetyResult,
+                "response_schema": _SR,
             },
         )
         if response.parsed:
             out = response.parsed
             return SafetyResult(
                 is_potential_emergency=out.is_potential_emergency,
-                reason=out.reason or ("Flagged by LLM as possible emergency." if out.is_potential_emergency else "No emergency signals."),
-                triggered_by="llm",
+                reason=out.reason or (
+                    "Flagged by LLM." if out.is_potential_emergency else "No emergency signals detected."
+                ),
+                triggered_by=triggered_by_value if out.is_potential_emergency else "none",
             )
     except Exception:
         pass
-    # On any LLM failure: be conservative and flag
+
+    # LLM failure — do NOT default to True (avoids false positives from outages)
     return SafetyResult(
-        is_potential_emergency=True,
-        reason="Safety LLM check failed; flagging as potential emergency to avoid missing a real one.",
-        triggered_by="llm",
+        is_potential_emergency=False,
+        reason="LLM check unavailable; rule-based screen found no emergency signals.",
+        triggered_by="none",
     )
 
+
+# ---------------------------------------------------------------------------
+# Public entry point
+# ---------------------------------------------------------------------------
 
 @traceable
 def screen_for_emergency(patient_message: str) -> SafetyResult:
     """
-    Run the safety screen. Target: 0% false negatives.
-    First applies rule-based patterns; if none match, runs a conservative LLM check.
+    Two-stage emergency screen.
+
+    Stage 1: Rule-based scan — fast, deterministic, high-recall.
+    Stage 2: LLM confirmation (if rule fired) or general scan (if no rule).
+
+    Returns a SafetyResult where triggered_by signals the confirmation level:
+      "rules+llm"  — both stages agree → confirmed emergency
+      "rules_only" — rule fired, LLM disagrees → suspected (warn triage agent)
+      "llm_only"   — no rule, LLM flagged → suspected (warn triage agent)
+      "none"       — both stages clear
+
+    Only "rules+llm" should trigger an emergency short-circuit in the graph.
+    All other non-none values route through the triage agent with a warning.
     """
     text = (patient_message or "").strip()
+
     rule_match = _rule_based_screen(text)
+
     if rule_match:
+        # Stage 2: confirm whether this rule match is truly acute/active
+        confirm_prompt = _CONFIRM_PROMPT.format(
+            rule_reason=rule_match,
+            text=text[:2000],
+        )
+        llm_result = _llm_call(confirm_prompt, triggered_by_value="rules+llm")
+
+        if llm_result.is_potential_emergency:
+            # Both layers agree — confirmed emergency
+            return SafetyResult(
+                is_potential_emergency=True,
+                reason=f"Confirmed emergency: rule matched '{rule_match}' and LLM verified acute presentation. {llm_result.reason}",
+                triggered_by="rules+llm",
+            )
+        else:
+            # Rule fired but LLM assessed as non-acute (chronic, historical, mild)
+            return SafetyResult(
+                is_potential_emergency=True,
+                reason=f"Suspected (rule match unconfirmed): pattern '{rule_match}' matched but LLM assessed as non-acute. Triage agent will evaluate with full context.",
+                triggered_by="rules_only",
+            )
+
+    # No rule match — run general LLM scan
+    llm_result = _llm_call(
+        _GENERAL_PROMPT + "\n" + text[:2000],
+        triggered_by_value="llm_only",
+    )
+
+    if llm_result.is_potential_emergency:
         return SafetyResult(
             is_potential_emergency=True,
-            reason=f"Message matched emergency pattern: {rule_match}",
-            triggered_by="rules",
+            reason=f"Flagged by general LLM scan (no rule match): {llm_result.reason}",
+            triggered_by="llm_only",
         )
-    return _llm_safety_screen(text)
+
+    return SafetyResult(
+        is_potential_emergency=False,
+        reason="No emergency signals detected by rules or LLM.",
+        triggered_by="none",
+    )

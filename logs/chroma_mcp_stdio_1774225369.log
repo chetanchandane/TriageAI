@@ -1,0 +1,29 @@
+2026-03-22 20:22:49,377 - root - INFO - STDIO MODE: Logging configured - all logs redirected to /Users/chetanchandane/Desktop/capstone/TriageAI/logs/chroma_mcp_stdio_1774225369.log
+2026-03-22 20:22:49,378 - chromamcp.unconfigured - WARNING - Logger requested before main configuration.
+2026-03-22 20:22:49,378 - root - INFO - Log retention policy set to 7 days
+2026-03-22 20:22:49,378 - root - INFO - Monkey patched logging.getLogger to ensure all future loggers use file output only
+2026-03-22 20:22:49,391 - chromamcp - INFO - Loaded environment variables from: .env
+2026-03-22 20:22:49,391 - chromamcp.utils.set_server_config - INFO - Global server config set: ChromaClientConfig(client_type='persistent', embedding_function_name='default', data_dir='./data/vector_store', host=None, port=8000, ssl=True, tenant=None, database=None, api_key=None, use_cpu_provider=None)
+2026-03-22 20:22:49,391 - chromamcp - INFO - Chroma client configuration set: persistent
+2026-03-22 20:22:49,391 - chromamcp.utils.chroma_client - INFO - Instantiating embedding function: 'default'
+2026-03-22 20:22:49,419 - chromamcp.utils.chroma_client - INFO - Successfully instantiated embedding function: 'default'
+2026-03-22 20:22:49,430 - chromamcp - INFO - Initializing persistent ChromaDB client at: ./data/vector_store
+2026-03-22 20:22:49,826 - chromamcp - INFO - Ensuring essential ChromaDB collections exist...
+2026-03-22 20:22:49,861 - chromamcp - INFO - Essential collection 'codebase_v1' not found (error: NotFoundError), attempting to create...
+2026-03-22 20:22:49,887 - chromamcp - INFO - Successfully created essential collection 'codebase_v1'.
+2026-03-22 20:22:49,888 - chromamcp - INFO - Essential collection 'chat_history_v1' not found (error: NotFoundError), attempting to create...
+2026-03-22 20:22:49,895 - chromamcp - INFO - Successfully created essential collection 'chat_history_v1'.
+2026-03-22 20:22:49,896 - chromamcp - INFO - Essential collection 'derived_learnings_v1' not found (error: NotFoundError), attempting to create...
+2026-03-22 20:22:49,901 - chromamcp - INFO - Successfully created essential collection 'derived_learnings_v1'.
+2026-03-22 20:22:49,902 - chromamcp - INFO - Essential collection 'thinking_sessions_v1' not found (error: NotFoundError), attempting to create...
+2026-03-22 20:22:49,907 - chromamcp - INFO - Successfully created essential collection 'thinking_sessions_v1'.
+2026-03-22 20:22:49,909 - chromamcp - INFO - Essential collection 'validation_evidence_v1' not found (error: NotFoundError), attempting to create...
+2026-03-22 20:22:49,918 - chromamcp - INFO - Successfully created essential collection 'validation_evidence_v1'.
+2026-03-22 20:22:49,919 - chromamcp - INFO - Essential collection 'test_results_v1' not found (error: NotFoundError), attempting to create...
+2026-03-22 20:22:49,923 - chromamcp - INFO - Successfully created essential collection 'test_results_v1'.
+2026-03-22 20:22:49,923 - chromamcp - INFO - Created 6 essential collections on server startup.
+2026-03-22 20:22:49,923 - chromamcp - INFO - ChromaDB client (persistent) initialized successfully.
+2026-03-22 20:22:49,923 - chromamcp - INFO - Server configured (CPU provider: auto-detected)
+2026-03-22 20:22:49,923 - chromamcp - INFO - Logs will be saved to: /Users/chetanchandane/Desktop/capstone/TriageAI/logs
+2026-03-22 20:22:49,926 - chromamcp - INFO - Chroma MCP server v0.2.28 started. Using stdio transport.
+2026-03-22 20:22:49,961 - mcp.server.lowlevel.server - INFO - Processing request of type ListToolsRequest

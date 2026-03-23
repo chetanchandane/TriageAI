@@ -5,9 +5,14 @@ create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   full_name text,
   patient_id text unique not null,
+  medical_history text default '',  -- Free-text medical history for the triage agent
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
+
+-- For existing databases: add the column if it doesn't exist yet.
+-- Safe to run multiple times (IF NOT EXISTS).
+alter table public.profiles add column if not exists medical_history text default '';
 
 -- Create profile automatically on signup (avoids RLS: app cannot insert as new user until session is set).
 drop trigger if exists on_auth_user_created on auth.users;

@@ -25,7 +25,7 @@ load_dotenv()
 
 def test_get_patient_history_returns_string():
     """get_patient_history should always return a string (even if empty)."""
-    from mcp.tools.database_tools import get_patient_history
+    from mcp_tools.tools.database_tools import get_patient_history
     result = get_patient_history("PAT-NONEXISTENT")
     assert isinstance(result, str), f"Expected str, got {type(result)}"
     print(f"  [PASS] get_patient_history returns str: {repr(result)[:80]}")
@@ -33,7 +33,7 @@ def test_get_patient_history_returns_string():
 
 def test_get_patient_history_with_valid_id():
     """If Supabase is configured, query a real patient_id (may still return empty)."""
-    from mcp.tools.database_tools import get_patient_history
+    from mcp_tools.tools.database_tools import get_patient_history
     result = get_patient_history("PAT-TEST0001")
     assert isinstance(result, str)
     print(f"  [PASS] get_patient_history (real query): {repr(result)[:80]}")
@@ -45,7 +45,7 @@ def test_get_patient_history_with_valid_id():
 
 def test_search_hospital_policy_returns_list():
     """search_hospital_policy should return a list of strings."""
-    from mcp.tools.rag_tools import search_hospital_policy
+    from mcp_tools.tools.rag_tools import search_hospital_policy
     result = search_hospital_policy("prescription refill")
     assert isinstance(result, list), f"Expected list, got {type(result)}"
     assert len(result) > 0, "Expected at least 1 policy chunk"
@@ -56,7 +56,7 @@ def test_search_hospital_policy_returns_list():
 
 def test_search_hospital_policy_top_k():
     """search_hospital_policy should respect the top_k parameter."""
-    from mcp.tools.rag_tools import search_hospital_policy
+    from mcp_tools.tools.rag_tools import search_hospital_policy
     result_1 = search_hospital_policy("appointment", top_k=1)
     result_3 = search_hospital_policy("appointment", top_k=3)
     assert len(result_1) == 1, f"Expected 1 chunk with top_k=1, got {len(result_1)}"
@@ -66,7 +66,7 @@ def test_search_hospital_policy_top_k():
 
 def test_search_hospital_policy_relevance():
     """Policy search for 'emergency' should return the emergency policy snippet."""
-    from mcp.tools.rag_tools import search_hospital_policy
+    from mcp_tools.tools.rag_tools import search_hospital_policy
     result = search_hospital_policy("emergency life threatening")
     texts = " ".join(result).lower()
     assert "emergency" in texts or "911" in texts or "er" in texts, \
@@ -80,7 +80,7 @@ def test_search_hospital_policy_relevance():
 
 def test_get_available_slots_returns_list():
     """get_available_slots should return the hardcoded slot list."""
-    from mcp.tools.database_tools import get_available_slots
+    from mcp_tools.tools.database_tools import get_available_slots
     result = get_available_slots()
     assert isinstance(result, list), f"Expected list, got {type(result)}"
     assert result == ["Mon 10am", "Wed 2pm", "Fri 9am"], f"Unexpected slots: {result}"
@@ -93,7 +93,7 @@ def test_get_available_slots_returns_list():
 
 def test_mcp_server_exports():
     """mcp.server should export all three core tools."""
-    from mcp.server import get_patient_history, search_hospital_policy, get_available_slots
+    from mcp_tools.server import get_patient_history, search_hospital_policy, get_available_slots
     assert callable(get_patient_history)
     assert callable(search_hospital_policy)
     assert callable(get_available_slots)

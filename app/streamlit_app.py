@@ -31,7 +31,7 @@ from app.messages_store import (
     get_messages_for_patient,
     update_message_triage_result,
 )
-from mcp.tools.communication import send_resolution_email
+from mcp_tools.tools.communication import send_resolution_email
 
 load_dotenv()
 
@@ -419,42 +419,84 @@ def render_staff_view():
                 st.caption(f"*{(h.get('created_at') or '')[:19]}* — {(h.get('content') or '')[:100]}…")
                 st.divider()
 
+        # --- Draft reply: editable + action buttons ---
+        st.markdown("**Draft reply**")
+        thread_id = tr.get("thread_id", "")
+        hitl_status = tr.get("hitl_status", "")
+
+        # Get the draft — from triage_result (HITL), or generate via policy agent
+        existing_draft = tr.get("draft_reply", "")
+        if not existing_draft:
+            policy_fns = _policy_available()
+            if policy_fns:
+                get_relevant_policy, generate_draft_reply, _gen_steps = policy_fns
+                policy_chunks = get_relevant_policy(content, tr.get("summary", ""))
+                existing_draft = generate_draft_reply(content, tr, policy_chunks)
+
+        edited_draft = st.text_area(
+            "Edit the draft before sending",
+            value=existing_draft or f"Thank you for contacting us regarding: {tr.get('summary', 'your concern')}. A staff member will review your message shortly.",
+            height=150,
+            key="staff_draft_edit",
+        )
+
+        # Suggested next steps (if policy agent available)
+        policy_fns = _policy_available()
+        if policy_fns:
+            _grp, _gdr, generate_next_steps = policy_fns
+            policy_chunks = get_relevant_policy(content, tr.get("summary", "")) if _policy_available() else []
+            steps = generate_next_steps(content, tr, policy_chunks)
+            if steps:
+                st.markdown("**Suggested next steps**")
+                for s in steps:
+                    st.markdown(f"- {s}")
+
         # Action buttons
         btn_col1, btn_col2, btn_col3 = st.columns(3)
         with btn_col1:
-            if st.button("Approve & Route to ER", type="primary", key="approve_route_er"):
-                new_tr = {**(tr or {}), "status": "Resolved/Routed"}
+            if st.button("Approve & Send", type="primary", key="staff_approve_send"):
+                subject = f"[TriageAI] Re: {tr.get('summary', 'Your message')}"
+                # Try to resume the HITL workflow if thread_id exists
+                if thread_id and hitl_status == "pending_review":
+                    try:
+                        from graph.workflow import resume_workflow
+                        _safety, updated_triage = resume_workflow(
+                            thread_id=thread_id,
+                            edited_draft=edited_draft if edited_draft != existing_draft else None,
+                        )
+                        updated_triage["status"] = "Resolved/Routed"
+                        update_message_triage_result(selected.get("id"), updated_triage)
+                        st.success(f"Approved and sent to {email}!")
+                        st.session_state.selected_message_id = None
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Resume failed: {e}")
+                else:
+                    # No HITL thread — send directly
+                    send_resolution_email(email, subject, edited_draft)
+                    new_tr = {**(tr or {}), "status": "Resolved/Routed", "hitl_status": "approved"}
+                    update_message_triage_result(selected.get("id"), new_tr)
+                    st.success(f"Sent to {email}!")
+                    st.session_state.selected_message_id = None
+                    st.rerun()
+        with btn_col2:
+            if st.button("Route to ER", key="approve_route_er"):
+                new_tr = {**(tr or {}), "status": "Resolved/Routed", "hitl_status": "approved"}
                 if update_message_triage_result(selected.get("id"), new_tr):
                     body = "Your case has been reviewed. Please proceed to the ER as directed by staff."
                     send_resolution_email(email, "Urgent: Proceed to ER", body)
-                    st.success("Message resolved and patient emailed!")
+                    st.success("Routed to ER and patient emailed!")
                     st.session_state.selected_message_id = None
                     st.rerun()
                 else:
                     st.error("Failed to update message.")
-        with btn_col2:
-            if st.button("Edit draft reply", key="edit_draft"):
-                st.info("Edit draft reply — coming soon.")
         with btn_col3:
-            if st.button("Request more info", key="request_more_info"):
-                st.info("Request more info — coming soon.")
-
-        # Policy / draft reply
-        st.markdown("**Policy & draft reply**")
-        policy_fns = _policy_available()
-        if policy_fns:
-            get_relevant_policy, generate_draft_reply, generate_next_steps = policy_fns
-            with st.container(border=True):
-                policy_chunks = get_relevant_policy(content, tr.get("summary", ""))
-                draft = generate_draft_reply(content, tr, policy_chunks)
-                steps = generate_next_steps(content, tr, policy_chunks)
-                st.markdown("**Draft reply**")
-                st.text(draft)
-                st.markdown("**Suggested next steps**")
-                for s in steps:
-                    st.markdown(f"- {s}")
-        else:
-            st.caption("Install `chromadb` and run `pip install -r requirements.txt` for policy-based draft replies.")
+            if st.button("Dismiss", key="staff_dismiss"):
+                dismissed_tr = {**tr, "hitl_status": "dismissed", "status": "Resolved/Routed"}
+                update_message_triage_result(selected.get("id"), dismissed_tr)
+                st.info("Message dismissed.")
+                st.session_state.selected_message_id = None
+                st.rerun()
 
 
 def render_pending_approvals():
