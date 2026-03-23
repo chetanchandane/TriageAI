@@ -1,0 +1,210 @@
+[
+  {
+    "id": "E01",
+    "message": "I'm having sudden crushing chest pain right now and my left arm is numb",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "cardiac_acute"
+  },
+  {
+    "id": "E02",
+    "message": "I took a whole bottle of my sleeping pills about 20 minutes ago",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "overdose"
+  },
+  {
+    "id": "E03",
+    "message": "I can't breathe, my throat is swelling up after eating peanuts",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "anaphylaxis"
+  },
+  {
+    "id": "E04",
+    "message": "I've been having thoughts about ending my life and I have a plan",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "mental_health_crisis"
+  },
+  {
+    "id": "E05",
+    "message": "My husband just collapsed and he's unconscious and not responding",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "unconscious"
+  },
+  {
+    "id": "FP01",
+    "message": "I've had mild back pain for the past few months, nothing too bad but it's annoying",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "NORMAL",
+    "is_emergency": false,
+    "category": "chronic_pain_fp"
+  },
+  {
+    "id": "FP02",
+    "message": "I have epilepsy and had a seizure last week. My neurologist adjusted my meds but I wanted to check in",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "NORMAL",
+    "is_emergency": false,
+    "category": "chronic_condition_fp"
+  },
+  {
+    "id": "FP03",
+    "message": "I get some shortness of breath when I climb stairs but it's been like this for years with my asthma",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "NORMAL",
+    "is_emergency": false,
+    "category": "chronic_respiratory_fp"
+  },
+  {
+    "id": "FP04",
+    "message": "I sometimes have chest discomfort when I exercise, it's been going on for a couple months",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "NORMAL",
+    "is_emergency": false,
+    "category": "chronic_cardiac_fp"
+  },
+  {
+    "id": "FP05",
+    "message": "I fainted once about two weeks ago but I was dehydrated. I've been fine since",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "NORMAL",
+    "is_emergency": false,
+    "category": "past_event_fp"
+  },
+  {
+    "id": "R01",
+    "message": "I need to refill my Lisinopril 10mg, I take it daily for blood pressure",
+    "expected_intent": "Refill",
+    "expected_urgency": "LOW",
+    "is_emergency": false,
+    "category": "refill_simple"
+  },
+  {
+    "id": "R02",
+    "message": "I ran out of my Metformin 500mg yesterday. Can I get a refill sent to CVS on Main Street?",
+    "expected_intent": "Refill",
+    "expected_urgency": "NORMAL",
+    "is_emergency": false,
+    "category": "refill_urgent"
+  },
+  {
+    "id": "R03",
+    "message": "Can I get a refill on my allergy medication? Cetirizine 10mg. I still have about a week's supply left",
+    "expected_intent": "Refill",
+    "expected_urgency": "LOW",
+    "is_emergency": false,
+    "category": "refill_low_priority"
+  },
+  {
+    "id": "A01",
+    "message": "I'd like to schedule a routine checkup, it's been about a year since my last one",
+    "expected_intent": "Appointment",
+    "expected_urgency": "LOW",
+    "is_emergency": false,
+    "category": "appointment_routine"
+  },
+  {
+    "id": "A02",
+    "message": "I need to see the doctor this week if possible. I've had a persistent cough for 5 days and a low fever",
+    "expected_intent": "Appointment",
+    "expected_urgency": "NORMAL",
+    "is_emergency": false,
+    "category": "appointment_sick"
+  },
+  {
+    "id": "A03",
+    "message": "Can I reschedule my appointment from Friday to next Monday? Something came up at work",
+    "expected_intent": "Appointment",
+    "expected_urgency": "LOW",
+    "is_emergency": false,
+    "category": "appointment_reschedule"
+  },
+  {
+    "id": "B01",
+    "message": "I received a bill for $450 but my insurance should have covered my last visit. Can someone look into this?",
+    "expected_intent": "Billing",
+    "expected_urgency": "LOW",
+    "is_emergency": false,
+    "category": "billing_dispute"
+  },
+  {
+    "id": "B02",
+    "message": "What are your accepted insurance plans? I just switched to Aetna and want to make sure you take it",
+    "expected_intent": "Billing",
+    "expected_urgency": "LOW",
+    "is_emergency": false,
+    "category": "billing_insurance"
+  },
+  {
+    "id": "C01",
+    "message": "I've been having headaches almost every day for the past two weeks. Over the counter meds aren't helping much",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "NORMAL",
+    "is_emergency": false,
+    "category": "clinical_headache"
+  },
+  {
+    "id": "C02",
+    "message": "My child has had a rash on his arms for 3 days. It's red and slightly itchy but no fever",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "NORMAL",
+    "is_emergency": false,
+    "category": "clinical_pediatric"
+  },
+  {
+    "id": "C03",
+    "message": "I got my blood work results back and my cholesterol is 240. Should I be worried? What should I do?",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "NORMAL",
+    "is_emergency": false,
+    "category": "clinical_lab_results"
+  },
+  {
+    "id": "C04",
+    "message": "I started a new medication last week and I've been feeling dizzy and nauseous. Is this normal?",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "NORMAL",
+    "is_emergency": false,
+    "category": "clinical_side_effects"
+  },
+  {
+    "id": "H01",
+    "message": "I twisted my ankle badly playing basketball yesterday. It's very swollen and I can't put weight on it",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "HIGH",
+    "is_emergency": false,
+    "category": "high_injury"
+  },
+  {
+    "id": "H02",
+    "message": "I've had a fever of 103°F for two days and it's not coming down with Tylenol. I'm also having chills",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "HIGH",
+    "is_emergency": false,
+    "category": "high_fever"
+  },
+  {
+    "id": "M01",
+    "message": "I need to refill my blood pressure medication and also schedule a follow-up appointment with Dr. Smith",
+    "expected_intent": "Multiple",
+    "expected_urgency": "LOW",
+    "is_emergency": false,
+    "category": "multi_refill_appointment"
+  },
+  {
+    "id": "M02",
+    "message": "I have a question about my bill from last month, and I also want to ask about the results of my recent X-ray",
+    "expected_intent": "Multiple",
+    "expected_urgency": "NORMAL",
+    "is_emergency": false,
+    "category": "multi_billing_clinical"
+  }
+]

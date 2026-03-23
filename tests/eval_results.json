@@ -1,0 +1,41 @@
+{
+  "timestamp": "2026-03-22 20:29:53",
+  "mode": "safety-only",
+  "num_messages": 2,
+  "total_time_s": 10.9,
+  "safety_metrics": {
+    "tp": 1,
+    "fp": 0,
+    "tn": 1,
+    "fn": 0,
+    "recall": 1.0,
+    "precision": 1.0,
+    "fp_rate": 0.0,
+    "total": 2
+  },
+  "triage_metrics": {},
+  "per_message": [
+    {
+      "id": "E01",
+      "message": "I'm having sudden crushing chest pain right now and my left arm is numb",
+      "expected_urgency": "EMERGENCY",
+      "expected_intent": "Clinical Question",
+      "is_emergency": true,
+      "actual_urgency": "",
+      "actual_intent": "",
+      "safety_flagged": true,
+      "safety_triggered_by": "rules+llm"
+    },
+    {
+      "id": "FP01",
+      "message": "I've had mild back pain for the past few months, nothing too bad but it's annoying",
+      "expected_urgency": "NORMAL",
+      "expected_intent": "Clinical Question",
+      "is_emergency": false,
+      "actual_urgency": "",
+      "actual_intent": "",
+      "safety_flagged": false,
+      "safety_triggered_by": "none"
+    }
+  ]
+}
