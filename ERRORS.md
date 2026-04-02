@@ -1,5 +1,9 @@
 # Errors Faced vs Their Resolution
 
+## Sprint 6: Staff View & Streaming Enhancements (Apr 2026)
+
+- **`UnboundLocalError: cannot access local variable 'get_relevant_policy'`** — The Staff detail view's "Suggested next steps" block referenced `get_relevant_policy` on line 447, but the variable was only assigned inside an earlier `if policy_fns:` block (line 432) which may not have executed on the current code path. The second block unpacked `policy_fns` using different variable names (`_grp, _gdr, generate_next_steps`) and assumed `get_relevant_policy` was still in scope from the first block. **Fix:** Changed the second unpack to also extract `get_relevant_policy` directly: `get_relevant_policy, _gdr, generate_next_steps = policy_fns`.
+
 ## Triage Logic Implementation (Feb 1, 2026)
 
 - **Challenge:** Pydantic ValidationError due to Markdown backticks in JSON response.

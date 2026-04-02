@@ -161,39 +161,43 @@ def _stream_and_display(app, inputs, config, patient):
     from graph.workflow import get_workflow_state
 
     full_response = ""
-    msg_placeholder = st.chat_message("assistant")
-    text_area = msg_placeholder.empty()
-    status_area = msg_placeholder.empty()
+    with st.chat_message("assistant"):
+        text_area = st.empty()
+        status_area = st.empty()
 
-    for event in stream_graph(app, inputs, config):
-        if event["type"] == "token":
-            full_response += event["content"]
-            text_area.markdown(full_response + " |")
-        elif event["type"] == "status":
-            status_area.caption(event["content"])
-        elif event["type"] == "interrupt":
-            # Render final text so far (without cursor)
-            if full_response:
-                text_area.markdown(full_response)
-            status_area.empty()
-            # Store the interrupt question and rerun so chat_input re-renders
-            st.session_state.pending_interrupt = event["content"]
-            st.session_state.chat_messages.append(
-                {"role": "assistant", "content": event["content"]}
-            )
-            st.rerun()
-            return
-        elif event["type"] == "error":
-            text_area.markdown(full_response or "")
-            status_area.error(event["content"])
-            return
-        elif event["type"] == "done":
-            pass
+        for event in stream_graph(app, inputs, config):
+            if event["type"] == "token":
+                full_response += event["content"]
+                text_area.markdown(full_response + " **|**")
+            elif event["type"] == "status":
+                # Show status with a pulsing dot indicator
+                status_area.markdown(
+                    f"<div style='color:#888; font-size:0.85em;'>&#9679; {event['content']}...</div>",
+                    unsafe_allow_html=True,
+                )
+            elif event["type"] == "interrupt":
+                # Render final text so far (without cursor)
+                if full_response:
+                    text_area.markdown(full_response)
+                status_area.empty()
+                # Store the interrupt question and rerun so chat_input re-renders
+                st.session_state.pending_interrupt = event["content"]
+                st.session_state.chat_messages.append(
+                    {"role": "assistant", "content": event["content"]}
+                )
+                st.rerun()
+                return
+            elif event["type"] == "error":
+                text_area.markdown(full_response or "")
+                status_area.error(event["content"])
+                return
+            elif event["type"] == "done":
+                pass
 
-    # Render final text (without cursor)
-    if full_response:
-        text_area.markdown(full_response)
-    status_area.empty()
+        # Render final text (without cursor)
+        if full_response:
+            text_area.markdown(full_response)
+        status_area.empty()
 
     # Extract final results from the workflow state
     thread_id = config["configurable"]["thread_id"]
@@ -443,8 +447,8 @@ def render_staff_view():
         # Suggested next steps (if policy agent available)
         policy_fns = _policy_available()
         if policy_fns:
-            _grp, _gdr, generate_next_steps = policy_fns
-            policy_chunks = get_relevant_policy(content, tr.get("summary", "")) if _policy_available() else []
+            get_relevant_policy, _gdr, generate_next_steps = policy_fns
+            policy_chunks = get_relevant_policy(content, tr.get("summary", ""))
             steps = generate_next_steps(content, tr, policy_chunks)
             if steps:
                 st.markdown("**Suggested next steps**")
