@@ -325,10 +325,18 @@ def render_patient_portal():
             st.caption("No messages yet.")
         else:
             for m in my_messages:
+                tr = m.get("triage_result") or {}
                 with st.container():
                     st.markdown(f"**{m.get('created_at', '')[:19]}** -- {m.get('content', '')[:100]}...")
-                    if m.get("triage_result"):
-                        st.caption(f"Urgency: {m['triage_result'].get('urgency', 'N/A')} | {m['triage_result'].get('summary', '')}")
+                    if tr:
+                        status = tr.get("status", "")
+                        urgency = tr.get("urgency", "N/A")
+                        st.caption(f"Urgency: {urgency} | {tr.get('summary', '')}")
+                    staff_reply = tr.get("staff_reply", "")
+                    if staff_reply:
+                        st.markdown(f"**Staff reply:** {staff_reply}")
+                    elif tr.get("status") == "Resolved/Routed":
+                        st.caption("Resolved by staff.")
                     st.divider()
 
 
@@ -469,6 +477,7 @@ def render_staff_view():
                             edited_draft=edited_draft if edited_draft != existing_draft else None,
                         )
                         updated_triage["status"] = "Resolved/Routed"
+                        updated_triage["staff_reply"] = edited_draft
                         update_message_triage_result(selected.get("id"), updated_triage)
                         st.success(f"Approved and sent to {email}!")
                         st.session_state.selected_message_id = None
@@ -478,17 +487,17 @@ def render_staff_view():
                 else:
                     # No HITL thread — send directly
                     send_resolution_email(email, subject, edited_draft)
-                    new_tr = {**(tr or {}), "status": "Resolved/Routed", "hitl_status": "approved"}
+                    new_tr = {**(tr or {}), "status": "Resolved/Routed", "hitl_status": "approved", "staff_reply": edited_draft}
                     update_message_triage_result(selected.get("id"), new_tr)
                     st.success(f"Sent to {email}!")
                     st.session_state.selected_message_id = None
                     st.rerun()
         with btn_col2:
             if st.button("Route to ER", key="approve_route_er"):
-                new_tr = {**(tr or {}), "status": "Resolved/Routed", "hitl_status": "approved"}
+                er_body = "Your case has been reviewed. Please proceed to the ER as directed by staff."
+                new_tr = {**(tr or {}), "status": "Resolved/Routed", "hitl_status": "approved", "staff_reply": er_body}
                 if update_message_triage_result(selected.get("id"), new_tr):
-                    body = "Your case has been reviewed. Please proceed to the ER as directed by staff."
-                    send_resolution_email(email, "Urgent: Proceed to ER", body)
+                    send_resolution_email(email, "Urgent: Proceed to ER", er_body)
                     st.success("Routed to ER and patient emailed!")
                     st.session_state.selected_message_id = None
                     st.rerun()
@@ -564,6 +573,7 @@ def render_pending_approvals():
                             )
                             # Update the message store with the approved result
                             updated_triage["status"] = "Resolved/Routed"
+                            updated_triage["staff_reply"] = edited_draft
                             update_message_triage_result(m.get("id"), updated_triage)
                             st.success(f"Approved and sent to {email}!")
                             st.rerun()

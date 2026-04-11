@@ -178,11 +178,8 @@ def safety_node(state: TriageWorkflowState) -> dict[str, Any]:
                     "is_emergency": True,
                 }
 
-    # Only short-circuit the graph when BOTH rule and LLM confirmed the emergency.
-    # Single-layer flags (rules_only, llm_only) route through the triage agent
-    # with the safety warning visible — it uses patient history to make a
-    # fully-informed urgency decision rather than blindly escalating.
-    is_confirmed_emergency = result.triggered_by == "rules+llm"
+    # Short-circuit the graph when the LLM screening confirms an active emergency.
+    is_confirmed_emergency = result.is_potential_emergency
 
     return {
         "safety_result": result.model_dump(),
@@ -304,8 +301,10 @@ def synthesis_node(state: TriageWorkflowState) -> dict[str, Any]:
     if triage_result.get("intent") == "Unknown":
         triage_result = _structured_extraction(original_message, messages, last_ai_content)
 
-    # Merge safety flags
-    if safety.get("is_potential_emergency"):
+    # Merge safety flags — only override urgency for confirmed emergencies
+    # that short-circuited the graph (is_emergency=True). Cases that went
+    # through the triage agent already have a context-informed urgency.
+    if state.get("is_emergency"):
         triage_result["urgency"] = "EMERGENCY"
         triage_result["safety_flagged"] = True
         triage_result["safety_reason"] = safety.get("reason", "")

@@ -5,7 +5,7 @@ An autonomous, multi-agent AI system designed to transform free-text patient mes
 ![TriageAI System Architecture](./assets/triage_ai.png)
 ## Overview
 Traditional patient portals often lead to administrative bottlenecks. This system utilizes **Agentic AI** to:
-- **Screen:** Flag potential emergencies with a two-layer safety gate (rule-based + LLM).
+- **Screen:** Flag potential emergencies with a context-aware LLM safety screen.
 - **Triage:** Categorize intent and urgency (Normal to Emergency).
 - **Route:** Assign messages to specific clinical queues.
 - **Support:** Generate policy-grounded draft replies and missing-information checklists via RAG.
@@ -17,7 +17,7 @@ Traditional patient portals often lead to administrative bottlenecks. This syste
 | **Orchestration** | LangGraph (cyclic agentic state machine with conditional routing + HITL interrupts) |
 | **Persistence** | LangGraph `SqliteSaver` checkpointer at `./data/checkpoints.db` (thread-based state recovery for HITL, survives restarts) |
 | **Reasoning** | Gemini 2.5 Flash via `langchain-google-genai` (tool-calling + structured output + vision) |
-| **Safety** | Calibrated regex patterns (crisis-modifier gated) + LLM fallback with negative constraints |
+| **Safety** | Context-aware LLM screening (Gemini 2.5 Flash structured output) — understands active vs. historical/chronic mentions |
 | **RAG** | ChromaDB (`PersistentClient` at `./data/vector_store`); Chroma MCP Server via `langchain-mcp-adapters` with local fallback |
 | **Database** | Supabase (PostgreSQL — Auth, profiles, messages with RLS); optional demo mode (in-memory) |
 | **Observability** | LangSmith (tracing every LLM call, tool call, and graph transition) |
@@ -37,8 +37,8 @@ The app includes a **login/register** flow so that:
 After login, the app shows three tabs:
 
 - **Patient Chat** — Streaming chat interface with real-time token display. Patients can attach images (rashes, wounds) for visual assessment via Gemini vision. The AI asks follow-up questions when checklist items are missing (conversational interrupts). Each message runs through the full agentic workflow (Safety gate → Triage agent with tool calling → Checklist gate → Synthesis → Draft reply).
-- **Staff view** — Two-pane dashboard: active queue (sorted by urgency) on the left, detail view on the right. Shows AI analysis, safety flags, patient history, policy-grounded draft replies, and suggested next steps. HITL status badges (⏸️ Pending, ✅ Sent, ⚡ Auto) indicate workflow state.
-- **Pending Approvals** — HITL review tab. Lists messages where the workflow paused before sending communication (NORMAL/HIGH/EMERGENCY urgency). Staff can inspect the AI analysis, edit the draft reply, and click "Approve & Send" to resume the workflow and deliver the email.
+- **Staff view** — Two-pane dashboard: active queue (sorted by urgency) on the left, detail view on the right. Shows AI analysis, safety flags, patient history, policy-grounded draft replies, and suggested next steps. HITL status badges (⏸️ Pending, ✅ Sent, ⚡ Auto) indicate workflow state. Staff replies are persisted and visible to patients in their message history.
+- **Pending Approvals** — HITL review tab. Lists messages where the workflow paused before sending communication (NORMAL/HIGH/EMERGENCY urgency). Staff can inspect the AI analysis, edit the draft reply, and click "Approve & Send" to resume the workflow and deliver the email. Replies are saved to the message record so patients can view them.
 
 ## Project Structure
 
@@ -50,7 +50,7 @@ triage-ai/
 │   ├── auth.py                   # Register/login (Supabase or in-memory demo)
 │   └── messages_store.py         # Save/load messages (Supabase or in-memory)
 ├── agents/                       # Reasoning & Logic Layer
-│   ├── safety_agent.py           # Emergency screening (rules + LLM)
+│   ├── safety_agent.py           # Emergency screening (LLM-based, context-aware)
 │   ├── triage_agent.py           # Intent/urgency classification (Gemini)
 │   └── policy_agent.py           # RAG retrieval + draft reply generation (ChromaDB)
 ├── graph/                        # Orchestration Layer (LangGraph)
@@ -119,7 +119,7 @@ Patient Message + Patient ID + Email
            │
            ▼
    ┌───────────────┐
-   │  Safety Node  │  Calibrated regex (crisis modifiers) → LLM fallback
+   │  Safety Node  │  Context-aware LLM screen (active vs. historical)
    └───────┬───────┘
            │
      ┌─────┴──────┐
@@ -186,7 +186,7 @@ Patient Message + Patient ID + Email
 
 | Component | Status |
 |-----------|--------|
-| Safety Agent (calibrated regex + LLM with negative constraints) | Implemented (refined Sprint 3) |
+| Safety Agent (context-aware LLM screening, replaces regex) | Implemented (refined Sprint 6) |
 | Triage Agent (Gemini with tool calling) | Implemented (Sprint 2) |
 | Policy Agent (Persistent ChromaDB RAG + draft replies) | Implemented (Sprint 4: PersistentClient) |
 | Cyclic LangGraph workflow (Safety → Agent loop → Synthesis → HITL) | Implemented (Sprint 2 + 3) |
@@ -209,6 +209,8 @@ Patient Message + Patient ID + Email
 | Checklist gate (conversational interrupts for missing info) | Implemented (Sprint 5) |
 | Safe-stream bridge (`app/streaming.py`) | Implemented (Sprint 5) |
 | Dual interrupts (patient checklist + staff HITL on same thread) | Implemented (Sprint 5) |
-| Real email notifications | Planned |
-| Persistent checkpointer (SqliteSaver / Redis) | Planned |
-| Evaluation harness (LangSmith) | Planned |
+| Staff reply persistence (replies visible in patient message history) | Implemented (Sprint 6) |
+| Synthesis node safety override fix (respects triage agent urgency) | Implemented (Sprint 6) |
+| Real email notifications (Resend API) | Implemented (Sprint 6) |
+| Persistent checkpointer (SqliteSaver) | Implemented (Sprint 6) |
+| Evaluation harness (labeled dataset + automated scoring) | Implemented (Sprint 6) |
