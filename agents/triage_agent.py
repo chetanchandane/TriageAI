@@ -10,6 +10,8 @@ from langsmith import traceable
 
 load_dotenv()
 
+_LLM_MODEL = os.environ.get("LLM_MODEL", "gemini-2.5-pro")
+
 
 @traceable
 def test_triage(patient_message: str):
@@ -36,7 +38,7 @@ def test_triage(patient_message: str):
 
     # We use 'response.parsed' to get the Pydantic object directly
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
+        model=_LLM_MODEL,
         contents=patient_message,
         config={
             "system_instruction": PROMPT,

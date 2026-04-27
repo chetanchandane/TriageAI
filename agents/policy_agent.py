@@ -13,6 +13,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+_LLM_MODEL = os.environ.get("LLM_MODEL", "gemini-2.5-pro")
+
 VECTOR_STORE_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     "data",
@@ -105,7 +107,7 @@ Policy context:
 
 Write a short draft reply (2-4 sentences) that staff can edit before sending. If the message is an emergency, suggest they call 911 or go to the ER."""
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model=_LLM_MODEL,
             contents=prompt,
         )
         return (response.text or "").strip() or "[No draft generated.]"
@@ -146,7 +148,7 @@ Policy: {policy_text[:1000]}
 
 Output only the list of steps, one per line, no numbering."""
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model=_LLM_MODEL,
             contents=prompt,
         )
         text = (response.text or "").strip()

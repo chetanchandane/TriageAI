@@ -51,7 +51,15 @@ def stream_graph(app, inputs, config):
     After the stream exhausts, checks ``app.get_state(config)`` for
     pending interrupts (checklist gate or HITL) and yields an interrupt
     event so the UI can prompt the patient.
+
+    The triage_agent node's text output is suppressed because it contains
+    internal JSON assessments (intent, urgency, checklist, etc.) meant for
+    the synthesis node — not for the patient.  Patient-facing content comes
+    from checklist interrupts and the final triage summary rendered by the UI.
     """
+    # Nodes whose AI text tokens are internal and should NOT be shown to the patient.
+    _INTERNAL_NODES = {"triage_agent", "synthesis", "draft_reply"}
+
     last_node = None
 
     try:
@@ -70,8 +78,8 @@ def stream_graph(app, inputs, config):
                     for tc in chunk.tool_calls:
                         tool_name = tc.get("name", "tool")
                         yield {"type": "status", "content": _get_tool_label(tool_name)}
-                # Streamed text tokens from the AI
-                elif hasattr(chunk, "content") and isinstance(chunk.content, str) and chunk.content.strip():
+                # Streamed text tokens — skip internal nodes (raw JSON assessments)
+                elif current_node not in _INTERNAL_NODES and hasattr(chunk, "content") and isinstance(chunk.content, str) and chunk.content.strip():
                     yield {"type": "token", "content": chunk.content}
 
             # Tool results — show a brief status that data came back

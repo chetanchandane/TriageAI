@@ -1,0 +1,542 @@
+[
+  {
+    "id": "HE01",
+    "message": "My words keep coming out wrong and my right arm feels strange. Started maybe 10 minutes ago. I'm not in pain really.",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "hard_emergency",
+    "note": "Stroke \u2014 no dramatic language, calm description"
+  },
+  {
+    "id": "HE02",
+    "message": "I think I accidentally took too many of my pills. Maybe the whole bottle. I'm not sure. I feel a little sleepy",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "hard_emergency",
+    "note": "Overdose \u2014 minimized with 'I think' and 'not sure'"
+  },
+  {
+    "id": "HE03",
+    "message": "My jaw has been aching for about an hour and I feel unusually tired. I'm 71 and I do have heart disease",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "hard_emergency",
+    "note": "Atypical heart attack \u2014 no chest pain, elderly patient"
+  },
+  {
+    "id": "HE04",
+    "message": "I've been thinking about ending things seriously for a while now. I have a plan and the means to do it",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "hard_emergency",
+    "note": "Active suicidal ideation with plan and means \u2014 calm phrasing"
+  },
+  {
+    "id": "HE05",
+    "message": "My husband is a diabetic and he seems really confused and won't fully wake up. He had his insulin but didn't eat",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "hard_emergency",
+    "note": "Hypoglycemic emergency \u2014 third-person, no dramatic language"
+  },
+  {
+    "id": "HE06",
+    "message": "My leg has been swollen for the past few days and now all of a sudden I'm having trouble breathing. Started an hour ago",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "hard_emergency",
+    "note": "Pulmonary embolism \u2014 leg clot + sudden breathlessness"
+  },
+  {
+    "id": "HE07",
+    "message": "We all suddenly got headaches at the same time, my husband, me, and even the dog is acting strange. We're all inside",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "hard_emergency",
+    "note": "Carbon monoxide poisoning \u2014 classic presentation, no keywords"
+  },
+  {
+    "id": "HE08",
+    "message": "Sharp stabbing pain in my lower right abdomen that started about an hour ago. I'm 8 weeks pregnant. The pain is getting worse",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "hard_emergency",
+    "note": "Possible ectopic pregnancy rupture"
+  },
+  {
+    "id": "HE09",
+    "message": "My son is 4 and has had a stiff neck and high fever since this morning and he's very sensitive to light. He seems off",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "hard_emergency",
+    "note": "Possible meningitis \u2014 triad of symptoms"
+  },
+  {
+    "id": "HE10",
+    "message": "Worst back pain I've ever felt in my life. It came on suddenly about 30 minutes ago. I'm 65 with a history of hypertension",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "hard_emergency",
+    "note": "Possible aortic dissection \u2014 sudden severe back pain + risk factors"
+  },
+  {
+    "id": "HE11",
+    "message": "I took my penicillin about an hour ago and my tongue feels thick and tingly. I'm having trouble swallowing",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "hard_emergency",
+    "note": "Delayed anaphylaxis \u2014 no throat closing yet but airway at risk"
+  },
+  {
+    "id": "HE12",
+    "message": "My dad was working outside all day in the heat. He's stopped sweating, his skin is hot, and he seems confused. Just now",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "hard_emergency",
+    "note": "Heat stroke \u2014 third person, no panic language"
+  },
+  {
+    "id": "HE13",
+    "message": "My 2 year old got into the cabinet under the sink while I wasn't looking. I don't know how much she ate or drank",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "hard_emergency",
+    "note": "Child poisoning \u2014 cleaning product ingestion"
+  },
+  {
+    "id": "HE14",
+    "message": "My wife just had a seizure, it lasted a few minutes. She's stopped shaking but she won't wake up. It's been 15 minutes",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "hard_emergency",
+    "note": "Post-ictal unresponsiveness / possible status epilepticus"
+  },
+  {
+    "id": "HE15",
+    "message": "I've been having the absolute worst headache of my life. Came out of nowhere about an hour ago. It's a 10 out of 10",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "hard_emergency",
+    "note": "Thunderclap headache \u2014 possible subarachnoid hemorrhage"
+  },
+  {
+    "id": "HE16",
+    "message": "I'm 39 weeks pregnant and I haven't felt the baby move since yesterday morning. That's more than 24 hours now",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "hard_emergency",
+    "note": "Decreased fetal movement at term \u2014 obstetric emergency"
+  },
+  {
+    "id": "HE17",
+    "message": "I'm vomiting blood. It's happened twice this morning, not a huge amount but it's bright red. I feel dizzy",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "hard_emergency",
+    "note": "Upper GI bleed \u2014 downplayed with 'not a huge amount'"
+  },
+  {
+    "id": "HE18",
+    "message": "I've used my rescue inhaler 4 times in the last hour and I'm still wheezing. It's just not helping today",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "hard_emergency",
+    "note": "Status asthmaticus \u2014 inhaler failure"
+  },
+  {
+    "id": "HE19",
+    "message": "I accidentally took my blood pressure pill twice this morning. I take Metoprolol 50mg. I feel a little lightheaded",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "hard_emergency",
+    "note": "Beta-blocker double dose \u2014 can cause dangerous bradycardia"
+  },
+  {
+    "id": "HE20",
+    "message": "I have been having crushing pressure in my chest and extreme tiredness for about 3 days now. I'm 56 and I smoke. I just thought it was stress",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "hard_emergency",
+    "note": "Possible slow-onset ACS \u2014 attributed to stress, delayed presentation"
+  },
+  {
+    "id": "HFP01",
+    "message": "I have a history of anaphylaxis to bee stings. I carry my epipen everywhere. Just need a refill for it",
+    "expected_intent": "Refill",
+    "expected_urgency": "LOW",
+    "is_emergency": false,
+    "category": "hard_false_positive",
+    "note": "History of anaphylaxis \u2014 not an active episode"
+  },
+  {
+    "id": "HFP02",
+    "message": "I literally cannot breathe when I get panic attacks. They're so bad. I need something stronger for my anxiety",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "NORMAL",
+    "is_emergency": false,
+    "category": "hard_false_positive",
+    "note": "Panic attacks \u2014 figurative 'cannot breathe', not current"
+  },
+  {
+    "id": "HFP03",
+    "message": "I feel like I'm dying every time I get my period. The cramps are unbearable. This has been going on for years",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "NORMAL",
+    "is_emergency": false,
+    "category": "hard_false_positive",
+    "note": "Dysmenorrhea \u2014 'dying' is figurative, chronic condition"
+  },
+  {
+    "id": "HFP04",
+    "message": "My heart races at the gym when I push myself hard. It's been happening for years. Is that normal?",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "NORMAL",
+    "is_emergency": false,
+    "category": "hard_false_positive",
+    "note": "Exercise-induced tachycardia \u2014 chronic, no acute change"
+  },
+  {
+    "id": "HFP05",
+    "message": "I had a stroke two years ago and made a full recovery. I just need my annual neurology referral",
+    "expected_intent": "Appointment",
+    "expected_urgency": "LOW",
+    "is_emergency": false,
+    "category": "hard_false_positive",
+    "note": "Past stroke \u2014 fully recovered, administrative request"
+  },
+  {
+    "id": "HFP06",
+    "message": "I almost passed out getting up too fast this morning. I know it's my orthostatic hypotension acting up again",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "NORMAL",
+    "is_emergency": false,
+    "category": "hard_false_positive",
+    "note": "Known orthostatic hypotension \u2014 not acute, patient self-aware"
+  },
+  {
+    "id": "HFP07",
+    "message": "I thought I was having a heart attack last week but the ER said it was severe acid reflux. Can I get something for it?",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "NORMAL",
+    "is_emergency": false,
+    "category": "hard_false_positive",
+    "note": "Past ER visit \u2014 already evaluated, not an active emergency"
+  },
+  {
+    "id": "HFP08",
+    "message": "I've been having chest tightness for months when I'm anxious. My cardiologist cleared me. It's anxiety-related",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "NORMAL",
+    "is_emergency": false,
+    "category": "hard_false_positive",
+    "note": "Anxiety chest tightness \u2014 cardiac clearance, chronic and stable"
+  },
+  {
+    "id": "HFP09",
+    "message": "I'm literally dying waiting for my prior auth to go through. It's been 2 weeks. Can someone call the insurance?",
+    "expected_intent": "Billing",
+    "expected_urgency": "LOW",
+    "is_emergency": false,
+    "category": "hard_false_positive",
+    "note": "'dying' is clearly figurative frustration about admin issue"
+  },
+  {
+    "id": "HFP10",
+    "message": "I've been bleeding heavily during my periods for the past 2 years. I soak through pads every hour. I want it checked",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "NORMAL",
+    "is_emergency": false,
+    "category": "hard_false_positive",
+    "note": "Menorrhagia \u2014 chronic, 2 years duration, no acute crisis"
+  },
+  {
+    "id": "HFP11",
+    "message": "I have congestive heart failure and shortness of breath when I lie flat is my baseline now. Just need my Lasix refilled",
+    "expected_intent": "Refill",
+    "expected_urgency": "LOW",
+    "is_emergency": false,
+    "category": "hard_false_positive",
+    "note": "CHF baseline \u2014 chronic, patient knows their normal, refill request"
+  },
+  {
+    "id": "HFP12",
+    "message": "I have a seizure disorder and had one last Tuesday. My neurologist already knows. I just need my Keppra refilled",
+    "expected_intent": "Refill",
+    "expected_urgency": "LOW",
+    "is_emergency": false,
+    "category": "hard_false_positive",
+    "note": "Known seizure disorder \u2014 past event, under care, refill needed"
+  },
+  {
+    "id": "HFP13",
+    "message": "My vision goes a little blurry sometimes during my migraines. It's been happening for years. I need a refill for my Sumatriptan",
+    "expected_intent": "Refill",
+    "expected_urgency": "LOW",
+    "is_emergency": false,
+    "category": "hard_false_positive",
+    "note": "Migraine with aura \u2014 well-established chronic condition, refill"
+  },
+  {
+    "id": "HFP14",
+    "message": "My blood pressure was 158/96 at the pharmacy today. I have hypertension and I'm already on medication. Should I adjust?",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "NORMAL",
+    "is_emergency": false,
+    "category": "hard_false_positive",
+    "note": "Elevated BP \u2014 patient feels fine, on meds, not hypertensive crisis"
+  },
+  {
+    "id": "HFP15",
+    "message": "I accidentally cut myself shaving, it bled for about 10 minutes but stopped on its own. Just wanted to check if I need stitches",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "NORMAL",
+    "is_emergency": false,
+    "category": "hard_false_positive",
+    "note": "Minor laceration \u2014 bleeding stopped, self-limited"
+  },
+  {
+    "id": "HFP16",
+    "message": "I'm on Warfarin and I nicked my finger. It bled longer than usual, maybe 20 minutes, but it's stopped now",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "NORMAL",
+    "is_emergency": false,
+    "category": "hard_false_positive",
+    "note": "Anticoagulant patient with minor cut \u2014 bleeding resolved"
+  },
+  {
+    "id": "HFP17",
+    "message": "I've been having intrusive thoughts about hurting myself in the past but I'm in therapy now and doing well. Just a check-in",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "NORMAL",
+    "is_emergency": false,
+    "category": "hard_false_positive",
+    "note": "Past self-harm thoughts \u2014 in treatment, explicitly stable"
+  },
+  {
+    "id": "HFP18",
+    "message": "I'm a nurse and I had a needlestick at work today with a used needle. Following hospital protocol but wanted to note it here too",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "NORMAL",
+    "is_emergency": false,
+    "category": "hard_false_positive",
+    "note": "Occupational needlestick \u2014 not life-threatening, protocol being followed"
+  },
+  {
+    "id": "HFP19",
+    "message": "My toddler ate some sand at the playground. She's acting totally fine and playing normally. Should I be worried?",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "LOW",
+    "is_emergency": false,
+    "category": "hard_false_positive",
+    "note": "Sand ingestion \u2014 not toxic, child asymptomatic"
+  },
+  {
+    "id": "HFP20",
+    "message": "I overdid it at the gym yesterday, arms and legs are killing me. I can barely move. Is this rhabdomyolysis?",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "NORMAL",
+    "is_emergency": false,
+    "category": "hard_false_positive",
+    "note": "DOMS \u2014 'killing me' is figurative, no systemic symptoms described"
+  },
+  {
+    "id": "HFP21",
+    "message": "I swallowed a small fish bone at dinner. It feels like it might be stuck but I can breathe and swallow fine",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "NORMAL",
+    "is_emergency": false,
+    "category": "hard_false_positive",
+    "note": "Foreign body \u2014 airway patent, no obstruction"
+  },
+  {
+    "id": "HFP22",
+    "message": "My miscarriage was 6 weeks ago and the bleeding has finally stopped. I want to discuss trying again",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "LOW",
+    "is_emergency": false,
+    "category": "hard_false_positive",
+    "note": "Past miscarriage \u2014 resolved, follow-up question"
+  },
+  {
+    "id": "HFP23",
+    "message": "I think I'm having a mental breakdown but not in a dangerous way. Just very overwhelmed. Can I get a therapy referral?",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "NORMAL",
+    "is_emergency": false,
+    "category": "hard_false_positive",
+    "note": "Stress \u2014 patient explicitly says not dangerous, seeking referral"
+  },
+  {
+    "id": "HFP24",
+    "message": "My 85-year-old mom fell and bumped her head but she's fully alert, talking normally, and says she feels fine. Should we come in?",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "NORMAL",
+    "is_emergency": false,
+    "category": "hard_false_positive",
+    "note": "Minor fall in elderly \u2014 neurologically intact, no LOC"
+  },
+  {
+    "id": "HFP25",
+    "message": "I've been getting crushing anxiety attacks that feel exactly like heart attacks. My doctor says my heart is fine. Need med adjustment",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "NORMAL",
+    "is_emergency": false,
+    "category": "hard_false_positive",
+    "note": "Panic disorder \u2014 cardiac workup already done, seeking medication help"
+  },
+  {
+    "id": "HFP26",
+    "message": "I'm allergic to penicillin and always have a reaction when I take it. I need this allergy flagged in my chart again",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "LOW",
+    "is_emergency": false,
+    "category": "hard_false_positive",
+    "note": "Drug allergy documentation \u2014 administrative, no active reaction"
+  },
+  {
+    "id": "HFP27",
+    "message": "I can't breathe when I think about my ex. Horrible anxiety. Anyway can I refill my Lexapro?",
+    "expected_intent": "Refill",
+    "expected_urgency": "LOW",
+    "is_emergency": false,
+    "category": "hard_false_positive",
+    "note": "'Can't breathe' is emotional metaphor, actual request is refill"
+  },
+  {
+    "id": "HFP28",
+    "message": "I have a history of blood clots in my legs. I'm planning a long flight next week. Any precautions I should take?",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "LOW",
+    "is_emergency": false,
+    "category": "hard_false_positive",
+    "note": "DVT history \u2014 no current symptoms, preventive question"
+  },
+  {
+    "id": "HFP29",
+    "message": "I've been having chest pain when I go up stairs for the past few months. My cardiologist has me on a stress test waitlist",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "NORMAL",
+    "is_emergency": false,
+    "category": "hard_false_positive",
+    "note": "Stable angina \u2014 under cardiology care, chronic and stable"
+  },
+  {
+    "id": "HFP30",
+    "message": "I had a bad fall 3 weeks ago and my ribs still hurt when I breathe deeply. It's slowly getting better though",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "NORMAL",
+    "is_emergency": false,
+    "category": "hard_false_positive",
+    "note": "Rib bruising/fracture \u2014 3 weeks old, improving, not acute"
+  },
+  {
+    "id": "EC01",
+    "message": "My 6-month-old has been crying nonstop for 3 hours and won't be soothed. She feels warm and seems really uncomfortable",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "edge_case",
+    "note": "Inconsolable infant + fever \u2014 possible serious infection in young baby"
+  },
+  {
+    "id": "EC02",
+    "message": "I fell down half a flight of stairs and my lower back is in a lot of pain. I can walk but it hurts a lot to move",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "HIGH",
+    "is_emergency": false,
+    "category": "edge_case",
+    "note": "Fall with back pain \u2014 ambiguous, walking rules out cord injury but needs eval"
+  },
+  {
+    "id": "EC03",
+    "message": "I took my insulin an hour ago but forgot to eat. I feel shaky, confused, and sweaty right now",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "edge_case",
+    "note": "Active hypoglycemia \u2014 ACTIVE symptoms right now, needs immediate action"
+  },
+  {
+    "id": "EC04",
+    "message": "My child ate some berries from a bush in the yard. I don't know what kind of bush it is. She ate maybe 5-6 of them",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "edge_case",
+    "note": "Unknown berry ingestion in child \u2014 some berries are highly toxic"
+  },
+  {
+    "id": "EC05",
+    "message": "I've had a fever of 104 since this morning and I'm a little confused and my heart is pounding. I have diabetes",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "edge_case",
+    "note": "Possible sepsis \u2014 high fever + AMS + tachycardia + immunocompromised"
+  },
+  {
+    "id": "EC06",
+    "message": "My vision went completely black for about 30 seconds while I was standing up. It came back to normal. No pain",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "HIGH",
+    "is_emergency": false,
+    "category": "edge_case",
+    "note": "Transient vision loss \u2014 could be TIA, orthostasis, or benign; needs evaluation"
+  },
+  {
+    "id": "EC07",
+    "message": "I've been having a really bad headache for 2 days and now my neck feels stiff. I don't have a fever I think",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "edge_case",
+    "note": "Headache + neck stiffness \u2014 possible meningitis even without confirmed fever"
+  },
+  {
+    "id": "EC08",
+    "message": "I'm 35 weeks pregnant and I've had a bad headache all day and my face looks puffy. I feel off",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "edge_case",
+    "note": "Possible preeclampsia \u2014 headache + edema at 35 weeks"
+  },
+  {
+    "id": "EC09",
+    "message": "I've had a sudden sharp pain in my side for the past hour. It comes in waves and I feel nauseous. Never had this before",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "HIGH",
+    "is_emergency": false,
+    "category": "edge_case",
+    "note": "Possible kidney stone or appendicitis \u2014 acute, needs urgent evaluation"
+  },
+  {
+    "id": "EC10",
+    "message": "I feel really unwell since this morning. Hard to describe. Just not right. I'm 68 and have had heart problems before",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "edge_case",
+    "note": "Vague malaise in elderly cardiac patient \u2014 classic atypical MI presentation"
+  }
+]

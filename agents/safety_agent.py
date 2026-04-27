@@ -20,6 +20,8 @@ from schemas.schemas import SafetyResult
 
 load_dotenv()
 
+_LLM_MODEL = os.environ.get("LLM_MODEL", "gemini-2.5-pro")
+
 
 # ---------------------------------------------------------------------------
 # LLM screening prompt — context-aware, replaces brittle regex patterns
@@ -83,7 +85,7 @@ def _llm_call(prompt: str) -> SafetyResult:
     try:
         from schemas.schemas import SafetyResult as _SR
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model=_LLM_MODEL,
             contents=prompt,
             config={
                 "response_mime_type": "application/json",

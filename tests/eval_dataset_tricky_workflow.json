@@ -1,0 +1,182 @@
+[
+  {
+    "id": "TW01",
+    "message": "My face is swelling and my lips are getting bigger after eating at a restaurant. My throat feels a little tight and I took a Benadryl but nothing is happening.",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "emergency",
+    "note": "Active anaphylaxis — antihistamine not stopping it = epinephrine needed"
+  },
+  {
+    "id": "TW02",
+    "message": "I was talking normally and suddenly couldn't get my words out for about 2 minutes. It seems fine now. Probably just anxiety. Should I come in?",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "emergency",
+    "note": "Transient aphasia = TIA until proven otherwise — 'it passed' makes patients delay calling 911"
+  },
+  {
+    "id": "TW03",
+    "message": "My teenager isn't waking up. Found some pills near him. He's breathing but very slowly and I can't get him to respond properly.",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "emergency",
+    "note": "Opioid/substance overdose — obtunded teen with pills nearby"
+  },
+  {
+    "id": "TW04",
+    "message": "I have this jaw tightness that comes on when I'm walking upstairs and goes away when I sit down. It's been happening for 2 weeks. I'm 58 with diabetes. I thought it was dental.",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": false,
+    "category": "tricky_high",
+    "note": "Exertional jaw pain in 58yo diabetic = angina equivalent / ACS — classic atypical presentation. Safety screener won't flag (no 'right now' language), triage agent must catch via history."
+  },
+  {
+    "id": "TW05",
+    "message": "I started amoxicillin yesterday for an ear infection. This morning I woke up with a mild rash on both arms. It's barely noticeable, probably unrelated.",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "HIGH",
+    "is_emergency": false,
+    "category": "tricky_high",
+    "note": "Drug rash within 24h of new antibiotic = must rule out drug hypersensitivity. Patient downplaying it."
+  },
+  {
+    "id": "TW06",
+    "message": "My 78-year-old mom fell in the bathroom this morning. She says nothing hurts and she got up on her own. Should I bring her in or wait and see?",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "HIGH",
+    "is_emergency": false,
+    "category": "tricky_high",
+    "note": "Elderly fall — occult hip fracture can be asymptomatic initially, x-ray needed"
+  },
+  {
+    "id": "TW07",
+    "message": "My insurance denied prior auth for my Humira and I've been off it for 3 weeks now. My Crohn's is really flaring — I'm having 8-10 bowel movements a day and can't keep food down. Can someone help with the appeal?",
+    "expected_intent": "Multiple",
+    "expected_urgency": "HIGH",
+    "is_emergency": false,
+    "category": "multi_intent",
+    "note": "Billing/prior-auth + clinical urgency combined. Severe Crohn's flare while off biologic."
+  },
+  {
+    "id": "TW08",
+    "message": "I've been taking St. John's Wort for depression for about 6 weeks. I just found out it might interact with my birth control. Am I at risk? I haven't missed any pills.",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "HIGH",
+    "is_emergency": false,
+    "category": "tricky_high",
+    "note": "St. John's Wort is a potent CYP3A4 inducer — significantly reduces OCP efficacy. 6 weeks exposure = real risk."
+  },
+  {
+    "id": "TW09",
+    "message": "I ran out of my insulin 4 days ago. I've been trying to ration what I had. My blood sugar at home is showing 380-400. I feel a bit nauseous and thirsty but I'm okay.",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": false,
+    "category": "tricky_emergency",
+    "note": "BS 380-400 + out of insulin 4 days + nausea = possible DKA onset. Patient minimizing ('I'm okay'). Safety screener may not flag."
+  },
+  {
+    "id": "TW10",
+    "message": "I had a tooth pulled 7 hours ago and I'm still getting some bleeding. I've gone through 6 gauze pads. It's slowing down I think but still going.",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "HIGH",
+    "is_emergency": false,
+    "category": "tricky_high",
+    "note": "Post-extraction bleeding for 7 hours = abnormal. 'Slowing down' doesn't make it safe to ignore."
+  },
+  {
+    "id": "TW11",
+    "message": "I absolutely cannot breathe through my nose, it's been blocked solid for 3 days. My allergies are killing me this spring. Can I get a prescription antihistamine? The OTC ones aren't cutting it.",
+    "expected_intent": "Refill",
+    "expected_urgency": "LOW",
+    "is_emergency": false,
+    "category": "tricky_low",
+    "note": "Dramatic language ('cannot breathe') but clearly allergic rhinitis — not airway emergency. Should stay LOW."
+  },
+  {
+    "id": "TW12",
+    "message": "My doctor just dropped my Xanax dose from 2mg TID to 0.5mg overnight. That was 5 days ago. I feel awful — shaking, sweating, can't sleep, heart racing. Is this normal?",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": false,
+    "category": "tricky_emergency",
+    "note": "Benzodiazepine withdrawal after abrupt dose cut = seizure risk. Patient may not know this is dangerous."
+  },
+  {
+    "id": "TW13",
+    "message": "I need to schedule a follow-up with Dr. Patel. Also — I've lost about 22 pounds in the last 6 weeks without trying. I thought it was great at first but people keep commenting on how thin I look.",
+    "expected_intent": "Multiple",
+    "expected_urgency": "HIGH",
+    "is_emergency": false,
+    "category": "multi_intent",
+    "note": "Appointment + hidden red flag. Unintentional 22lb loss in 6 weeks = must rule out malignancy, hyperthyroidism, DM."
+  },
+  {
+    "id": "TW14",
+    "message": "I've been having really bad chest pain when I breathe deeply for the last 4 months. Sharp on the left side. My doctor said it's costochondritis 2 years ago. Is it the same thing?",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "NORMAL",
+    "is_emergency": false,
+    "category": "tricky_normal",
+    "note": "Sounds scary but reproducible positional chest pain with prior diagnosis = plausible costochondritis. NORMAL is appropriate."
+  },
+  {
+    "id": "TW15",
+    "message": "Hi, I need to refill my blood pressure medication. I don't remember the exact name — it's a small round white pill I take every morning. Also I want to ask about my cholesterol results from last month.",
+    "expected_intent": "Multiple",
+    "expected_urgency": "NORMAL",
+    "is_emergency": false,
+    "category": "multi_intent",
+    "note": "Vague refill (no drug name) + results inquiry. Agent needs to ask clarifying questions."
+  },
+  {
+    "id": "TW16",
+    "message": "I've been feeling really hopeless and empty for about 2 months. Not like I want to hurt myself, just nothing feels worth it. I stopped going to therapy because it felt pointless. My psychiatrist doesn't know.",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "HIGH",
+    "is_emergency": false,
+    "category": "mental_health",
+    "note": "Passive hopelessness + therapy dropout + concealing from psychiatrist = HIGH (not EMERGENCY since no SI/plan, but needs urgent clinical attention)"
+  },
+  {
+    "id": "TW17",
+    "message": "I had knee replacement surgery 5 days ago. My calf on the same leg is now swollen and tight, and I have some shortness of breath when I walk to the bathroom. I thought it was just recovery.",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "emergency",
+    "note": "Post-op calf swelling + dyspnea = DVT with possible PE. Classic presentation the patient is attributing to normal recovery."
+  },
+  {
+    "id": "TW18",
+    "message": "I need to dispute a $480 charge from March. While I'm asking — I've been having really bad headaches every day for 3 weeks straight, always behind my right eye. Ibuprofen barely helps.",
+    "expected_intent": "Multiple",
+    "expected_urgency": "HIGH",
+    "is_emergency": false,
+    "category": "multi_intent",
+    "note": "Billing question + buried clinical red flag. Daily unilateral headaches x3 weeks = needs workup (cluster, elevated ICP, secondary causes)."
+  },
+  {
+    "id": "TW19",
+    "message": "My new cardiologist prescribed Clarithromycin for a respiratory infection. I'm already on Atorvastatin 40mg daily. I wanted to double check if this combination is safe before I fill it.",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "HIGH",
+    "is_emergency": false,
+    "category": "tricky_high",
+    "note": "Clarithromycin inhibits CYP3A4 — can raise statin levels 10x, causing rhabdomyolysis. Patient doing the right thing by asking."
+  },
+  {
+    "id": "TW20",
+    "message": "I take Lisinopril and was just prescribed ibuprofen by urgent care for a sprained ankle. I've already taken 3 doses. My ankles look a bit puffy now but I assumed that was from the sprain.",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "HIGH",
+    "is_emergency": false,
+    "category": "tricky_high",
+    "note": "NSAIDs + ACE inhibitor = AKI risk + fluid retention. New ankle puffiness (bilateral?) could be medication-induced edema."
+  }
+]

@@ -194,9 +194,6 @@ def _stream_and_display(app, inputs, config, patient):
             elif event["type"] == "done":
                 pass
 
-        # Render final text (without cursor)
-        if full_response:
-            text_area.markdown(full_response)
         status_area.empty()
 
     # Extract final results from the workflow state
@@ -233,19 +230,20 @@ def _stream_and_display(app, inputs, config, patient):
             triage_result=triage_result,
         )
 
-        # Show triage summary
+        # Brief confirmation — toast survives the rerun below.
         summary = triage_result.get("summary", "")
         urgency = triage_result.get("urgency", "")
         if summary or urgency:
-            result_text = f"**Triage complete.** Urgency: {urgency}. {summary}"
-            st.session_state.chat_messages.append(
-                {"role": "assistant", "content": result_text}
-            )
+            st.toast(f"Triage complete — {urgency}: {summary}", icon="\u2705")
 
-    # Reset chat thread for next conversation
+    # Reset chat for a fresh conversation — clear messages and rerun so the
+    # UI starts clean.  The completed triage is already saved to the message
+    # store and will appear under "Your message history".
     st.session_state.chat_thread_id = None
     st.session_state.pending_interrupt = None
     st.session_state.uploaded_file_data = None
+    st.session_state.chat_messages = []
+    st.rerun()
 
 
 def render_patient_portal():

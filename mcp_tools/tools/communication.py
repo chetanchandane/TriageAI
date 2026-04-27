@@ -21,6 +21,9 @@ def send_resolution_email(patient_email: str, subject: str, body: str) -> bool:
     Send a resolution/notification email to the patient via Resend.
     Falls back to console mock if RESEND_API_KEY is not configured.
     """
+    # Resend rejects newlines in the subject field — collapse to a single line.
+    subject = " ".join(subject.splitlines()).strip()
+
     api_key = os.environ.get("RESEND_API_KEY")
 
     if not api_key:

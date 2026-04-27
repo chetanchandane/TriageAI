@@ -23,6 +23,8 @@ from graph.state import TriageWorkflowState
 
 load_dotenv()
 
+_LLM_MODEL = os.environ.get("LLM_MODEL", "gemini-2.5-pro")
+
 
 # ---------------------------------------------------------------------------
 # LangChain tool wrappers (bound to the Gemini model for agentic tool calling)
@@ -122,7 +124,7 @@ def _visual_safety_screen(file_uri: str, file_mime: str, msg: str) -> dict | Non
 
     try:
         llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
+            model=_LLM_MODEL,
             google_api_key=api_key,
         )
         prompt = (
@@ -202,7 +204,7 @@ def _build_triage_model(tools=None):
         tools = TRIAGE_TOOLS
     api_key = os.environ.get("LLM_GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        model=_LLM_MODEL,
         google_api_key=api_key,
     )
     return llm.bind_tools(tools)
@@ -367,7 +369,7 @@ Tool context:
 Classify this message with intent, confidence, urgency, summary, checklist, and recommended_queue."""
 
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model=_LLM_MODEL,
             contents=prompt,
             config={
                 "response_mime_type": "application/json",

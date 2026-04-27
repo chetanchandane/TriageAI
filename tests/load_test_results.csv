@@ -1,0 +1,10 @@
+id,category,message_preview,expected_intent,actual_intent,intent_match,expected_urgency,actual_urgency,urgency_match,is_emergency,safety_flagged,safety_correct,confidence,recommended_queue,elapsed_s,error
+A02,appointment,I need to see the doctor this week if possible. I've had a persistent cough for ,Appointment,Appointment,Y,NORMAL,NORMAL,Y,False,False,Y,0.95,Front Desk,35.7,
+A04,appointment,I need to book my annual physical. Do you have any openings in the next two week,Appointment,Appointment,Y,LOW,NORMAL,N,False,False,Y,1.0,Front Desk,31.2,
+B01,billing,I received a bill for $450 but my insurance should have covered my last visit. C,Billing,Billing,Y,LOW,NORMAL,N,False,False,Y,0.98,Billing,32.3,
+C01,clinical_question,I've been having headaches almost every day for the past two weeks. Over the cou,Clinical Question,Appointment,N,NORMAL,HIGH,N,False,False,Y,0.95,Front Desk,34.8,
+C05,clinical_question,I've had a sore throat for 4 days and white spots on my tonsils. Could this be s,Clinical Question,Clinical Question,Y,NORMAL,NORMAL,Y,False,False,Y,0.95,Nursing,40.7,
+H01,high_urgency,I twisted my ankle badly playing basketball yesterday. It's very swollen and I c,Clinical Question,Appointment,N,HIGH,HIGH,Y,False,False,Y,0.98,Nursing,33.2,
+H03,high_urgency,I got stung by a bee and my whole arm is swelling up. It's red and hot to the to,Clinical Question,Clinical Question,Y,HIGH,EMERGENCY,N,False,True,N,0.95,Nursing,32.2,
+M02,multi_intent,"I have a question about my bill from last month, and I also want to ask about th",Multiple,Multiple,Y,NORMAL,NORMAL,Y,False,False,Y,0.95,Billing,36.9,
+M03,multi_intent,I need to refill my Metformin and I've also been having some tingling in my feet,Multiple,Clinical Question,N,NORMAL,HIGH,N,False,False,Y,0.95,Nursing,39.9,

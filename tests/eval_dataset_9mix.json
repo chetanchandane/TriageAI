@@ -1,0 +1,74 @@
+[
+  {
+    "id": "A02",
+    "message": "I need to see the doctor this week if possible. I've had a persistent cough for 5 days and a low fever",
+    "expected_intent": "Appointment",
+    "expected_urgency": "NORMAL",
+    "is_emergency": false,
+    "category": "appointment"
+  },
+  {
+    "id": "A04",
+    "message": "I need to book my annual physical. Do you have any openings in the next two weeks?",
+    "expected_intent": "Appointment",
+    "expected_urgency": "LOW",
+    "is_emergency": false,
+    "category": "appointment"
+  },
+  {
+    "id": "B01",
+    "message": "I received a bill for $450 but my insurance should have covered my last visit. Can someone look into this?",
+    "expected_intent": "Billing",
+    "expected_urgency": "LOW",
+    "is_emergency": false,
+    "category": "billing"
+  },
+  {
+    "id": "C01",
+    "message": "I've been having headaches almost every day for the past two weeks. Over the counter meds aren't helping much",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "NORMAL",
+    "is_emergency": false,
+    "category": "clinical_question"
+  },
+  {
+    "id": "C05",
+    "message": "I've had a sore throat for 4 days and white spots on my tonsils. Could this be strep?",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "NORMAL",
+    "is_emergency": false,
+    "category": "clinical_question"
+  },
+  {
+    "id": "H01",
+    "message": "I twisted my ankle badly playing basketball yesterday. It's very swollen and I can't put weight on it",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "HIGH",
+    "is_emergency": false,
+    "category": "high_urgency"
+  },
+  {
+    "id": "H03",
+    "message": "I got stung by a bee and my whole arm is swelling up. It's red and hot to the touch. No breathing issues though",
+    "expected_intent": "Clinical Question",
+    "expected_urgency": "HIGH",
+    "is_emergency": false,
+    "category": "high_urgency"
+  },
+  {
+    "id": "M02",
+    "message": "I have a question about my bill from last month, and I also want to ask about the results of my recent X-ray",
+    "expected_intent": "Multiple",
+    "expected_urgency": "NORMAL",
+    "is_emergency": false,
+    "category": "multi_intent"
+  },
+  {
+    "id": "M03",
+    "message": "I need to refill my Metformin and I've also been having some tingling in my feet. Should I be worried?",
+    "expected_intent": "Multiple",
+    "expected_urgency": "NORMAL",
+    "is_emergency": false,
+    "category": "multi_intent"
+  }
+]

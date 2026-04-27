@@ -35,8 +35,8 @@ DATASET_PATH = os.path.join(
 )
 
 
-def load_dataset(filter_ids=None):
-    with open(DATASET_PATH) as f:
+def load_dataset(filter_ids=None, dataset_path=None):
+    with open(dataset_path or DATASET_PATH) as f:
         data = json.load(f)
     if filter_ids:
         data = [d for d in data if d["id"] in filter_ids]
@@ -175,9 +175,13 @@ def main():
     parser = argparse.ArgumentParser(description="TriageAI Evaluation Harness")
     parser.add_argument("--safety-only", action="store_true", help="Only run safety screen (no full triage)")
     parser.add_argument("--ids", nargs="+", help="Run specific message IDs only")
+    parser.add_argument("--dataset", default=DATASET_PATH, help="Path to dataset JSON")
+    parser.add_argument("--limit", type=int, default=0, help="Max messages to run (0=all)")
     args = parser.parse_args()
 
-    dataset = load_dataset(filter_ids=args.ids)
+    dataset = load_dataset(filter_ids=args.ids, dataset_path=args.dataset)
+    if args.limit > 0:
+        dataset = dataset[:args.limit]
     print(f"\n{'=' * 60}")
     print(f"TriageAI Evaluation Harness")
     print(f"{'=' * 60}")

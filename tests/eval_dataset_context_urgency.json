@@ -1,0 +1,272 @@
+[
+  {
+    "id": "CU01",
+    "patient_message": "I've had a mild headache since this morning. It's maybe a 2 out of 10. Probably just dehydration.",
+    "patient_history": "Patient underwent surgical clipping of a cerebral aneurysm 3 weeks ago. Discharged with instructions to report any new headache immediately as a warning sign of re-bleed.",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "context_urgency",
+    "clinical_reasoning": "New headache post-aneurysm surgery = sentinel bleed until proven otherwise"
+  },
+  {
+    "id": "CU02",
+    "patient_message": "I noticed a small bruise on my forearm. I don't remember bumping into anything.",
+    "patient_history": "Patient has severe hemophilia A (Factor VIII deficiency). Last hospitalization was for spontaneous intramuscular bleed. On prophylactic factor replacement therapy.",
+    "expected_urgency": "HIGH",
+    "is_emergency": true,
+    "category": "context_urgency",
+    "clinical_reasoning": "Spontaneous bruising in hemophiliac = possible internal bleed requiring factor infusion"
+  },
+  {
+    "id": "CU03",
+    "patient_message": "Feeling a little tired today, maybe slightly more than usual. Probably just didn't sleep well.",
+    "patient_history": "Patient received allogeneic bone marrow transplant 6 weeks ago. Currently in immunosuppressed recovery phase. Last CBC showed neutrophil count of 0.3 (severely neutropenic).",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "context_urgency",
+    "clinical_reasoning": "Fatigue in neutropenic post-transplant patient = possible neutropenic sepsis, an oncologic emergency"
+  },
+  {
+    "id": "CU04",
+    "patient_message": "I have a mild low-grade fever, around 99.8. I feel okay otherwise.",
+    "patient_history": "Patient is on FOLFOX chemotherapy for stage III colon cancer. Last white blood cell count from 5 days ago showed ANC of 0.4. Neutropenic precautions in place.",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "context_urgency",
+    "clinical_reasoning": "Fever >= 38C in neutropenic chemo patient = neutropenic fever, treated as emergency per oncology protocol"
+  },
+  {
+    "id": "CU05",
+    "patient_message": "Slight chest tightness, maybe a 1 or 2 out of 10. Comes and goes. I've been stressed at work.",
+    "patient_history": "Patient had a drug-eluting coronary stent placed in the LAD artery 8 days ago. On dual antiplatelet therapy (aspirin + Plavix). Premature stent discontinuation risk is high in this window.",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "context_urgency",
+    "clinical_reasoning": "Any chest symptom within 30 days of stent placement = possible acute stent thrombosis, mortality risk >50%"
+  },
+  {
+    "id": "CU06",
+    "patient_message": "My leg is a little swollen around the calf. Not painful really, just puffy.",
+    "patient_history": "Patient had total hip replacement 10 days ago. Not yet mobile, on prophylactic enoxaparin. Has a history of prior DVT in the same leg.",
+    "expected_urgency": "HIGH",
+    "is_emergency": true,
+    "category": "context_urgency",
+    "clinical_reasoning": "Unilateral calf swelling post-surgery in DVT-history patient = high probability DVT, PE risk"
+  },
+  {
+    "id": "CU07",
+    "patient_message": "Feeling a bit confused and foggy this afternoon. Probably just tired.",
+    "patient_history": "Patient has a known glioblastoma multiforme (GBM, grade IV brain tumor) in the right frontal lobe. Completed radiation 2 months ago. On dexamethasone taper.",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "context_urgency",
+    "clinical_reasoning": "New confusion in GBM patient = possible tumor progression, cerebral edema, or herniation"
+  },
+  {
+    "id": "CU08",
+    "patient_message": "I have a mild nosebleed that started about 20 minutes ago. It's mostly stopped now.",
+    "patient_history": "Patient is on warfarin for mechanical heart valve. Last INR checked 3 days ago was 4.8 (target 2.5-3.5). Dose adjustment was pending.",
+    "expected_urgency": "HIGH",
+    "is_emergency": true,
+    "category": "context_urgency",
+    "clinical_reasoning": "Bleeding in supratherapeutic anticoagulated patient = risk of serious internal hemorrhage"
+  },
+  {
+    "id": "CU09",
+    "patient_message": "Mild shortness of breath when walking up the stairs today. A little more than usual.",
+    "patient_history": "Patient has severe pulmonary arterial hypertension (PAH), WHO Class III. On IV epoprostenol via central line. Any acute decompensation can rapidly become fatal.",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "context_urgency",
+    "clinical_reasoning": "New exertional dyspnea in PAH patient = early right heart decompensation, can deteriorate within hours"
+  },
+  {
+    "id": "CU10",
+    "patient_message": "My back is a little achy today, like a mild muscle strain. Probably from sitting too long.",
+    "patient_history": "Patient received a cadaveric kidney transplant 5 weeks ago. On tacrolimus and mycophenolate. Transplanted kidney is in the retroperitoneal left flank area.",
+    "expected_urgency": "HIGH",
+    "is_emergency": true,
+    "category": "context_urgency",
+    "clinical_reasoning": "Back/flank pain in renal transplant patient = possible graft rejection or vascular complication"
+  },
+  {
+    "id": "CU11",
+    "patient_message": "Slight sore throat, bit of a scratch feeling. Nothing major.",
+    "patient_history": "Patient is on clozapine for treatment-resistant schizophrenia. Mandatory ANC monitoring. Last ANC was borderline at 1.4. Clozapine carries a 1-2% risk of agranulocytosis.",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "context_urgency",
+    "clinical_reasoning": "Sore throat in clozapine patient = first sign of agranulocytosis, requires immediate ANC check and possible drug cessation"
+  },
+  {
+    "id": "CU12",
+    "patient_message": "Feeling a bit off today, kind of weak and nauseous. Probably ate something bad.",
+    "patient_history": "Patient has primary adrenal insufficiency (Addison's disease). Was recently under significant physical stress (flu last week). On hydrocortisone replacement therapy but has been vomiting.",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "context_urgency",
+    "clinical_reasoning": "Weakness/nausea + vomiting in Addison's patient under stress = possible adrenal crisis, can be fatal within hours"
+  },
+  {
+    "id": "CU13",
+    "patient_message": "Mild headache and I feel a little lightheaded. Maybe just dehydrated.",
+    "patient_history": "Patient is on lithium 900mg/day for bipolar disorder. Has chronic kidney disease stage 2, which reduces lithium clearance. Last lithium level was 1.3 mEq/L (upper limit of normal).",
+    "expected_urgency": "HIGH",
+    "is_emergency": true,
+    "category": "context_urgency",
+    "clinical_reasoning": "Headache + dizziness in lithium patient with CKD = possible early lithium toxicity"
+  },
+  {
+    "id": "CU14",
+    "patient_message": "A little difficulty swallowing today, feels slightly tight when I swallow.",
+    "patient_history": "Patient had a total thyroidectomy with parathyroid exploration 48 hours ago. Post-operative hematoma is a known complication in this window.",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "context_urgency",
+    "clinical_reasoning": "Dysphagia 48h post-thyroidectomy = expanding neck hematoma compressing airway — surgical emergency"
+  },
+  {
+    "id": "CU15",
+    "patient_message": "Mild blurry vision in my right eye today. It cleared up after a few minutes.",
+    "patient_history": "Patient has biopsy-confirmed giant cell arteritis (temporal arteritis) diagnosed 2 months ago. Currently tapering prednisone from 60mg to 20mg. Visual symptoms are a major red flag for this condition.",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "context_urgency",
+    "clinical_reasoning": "Transient vision loss in GCA patient on steroid taper = threatened permanent blindness from optic artery involvement"
+  },
+  {
+    "id": "CU16",
+    "patient_message": "Minor gum bleeding when I brushed my teeth this morning. Happens occasionally.",
+    "patient_history": "Patient had a coronary artery bypass graft (CABG) 2 weeks ago. On dual antiplatelet therapy. Also has known von Willebrand disease type 2, a platelet function disorder.",
+    "expected_urgency": "HIGH",
+    "is_emergency": true,
+    "category": "context_urgency",
+    "clinical_reasoning": "Bleeding in post-CABG patient with von Willebrand disease on antiplatelets = compounding coagulopathy risk"
+  },
+  {
+    "id": "CU17",
+    "patient_message": "Slight numbness and tingling in my fingers, started today. Probably slept on my arm funny.",
+    "patient_history": "Patient had anterior cervical discectomy and fusion (ACDF) at C5-C6 three days ago. New neurological symptoms in this post-op window are a red flag for spinal cord compression.",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "context_urgency",
+    "clinical_reasoning": "New neurology post-spinal surgery = possible hematoma or hardware complication causing cord compression"
+  },
+  {
+    "id": "CU18",
+    "patient_message": "Mild stomach cramping today, maybe a 2 or 3 out of 10. Could be gas.",
+    "patient_history": "Patient had a bowel resection and anastomosis for Crohn's disease 6 days ago. Anastomotic leak is most common between post-operative days 3-7.",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "context_urgency",
+    "clinical_reasoning": "Abdominal pain in peak anastomotic leak window post-bowel surgery = possible peritonitis"
+  },
+  {
+    "id": "CU19",
+    "patient_message": "Feeling a bit anxious and heart is fluttering a bit. I've been stressed about work.",
+    "patient_history": "Patient has a known pheochromocytoma (adrenal gland tumor) confirmed on imaging. Awaiting surgery in 3 weeks. Not yet on alpha-blockade preoperative preparation.",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "context_urgency",
+    "clinical_reasoning": "Palpitations in unblocked pheochromocytoma patient = possible hypertensive crisis from catecholamine surge"
+  },
+  {
+    "id": "CU20",
+    "patient_message": "I have a small rash on my forearm, appeared overnight. It's not itchy.",
+    "patient_history": "Patient was started on lamotrigine 3 weeks ago for epilepsy. Any new rash within 8 weeks of starting lamotrigine must be evaluated as possible Stevens-Johnson Syndrome (SJS), a life-threatening skin reaction.",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "context_urgency",
+    "clinical_reasoning": "New rash within SJS window for lamotrigine = must rule out SJS/TEN until proven otherwise"
+  },
+  {
+    "id": "CU21",
+    "patient_message": "Slight cough started today, dry and mild. Probably just the dry weather.",
+    "patient_history": "Patient received a bilateral lung transplant 7 weeks ago. On tacrolimus and mycophenolate. Any respiratory symptoms in this window are concerning for primary graft dysfunction or acute rejection.",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "context_urgency",
+    "clinical_reasoning": "New cough in early post-lung transplant window = acute rejection or infection until proven otherwise"
+  },
+  {
+    "id": "CU22",
+    "patient_message": "Mild ankle swelling today, one side. Not painful.",
+    "patient_history": "Patient has decompensated liver cirrhosis (Child-Pugh Class C) with known esophageal varices. Albumin is critically low at 2.0. Any volume shift can precipitate hepatic decompensation.",
+    "expected_urgency": "HIGH",
+    "is_emergency": true,
+    "category": "context_urgency",
+    "clinical_reasoning": "New edema in decompensated cirrhosis = possible hypoalbuminemia worsening or portal hypertension escalation"
+  },
+  {
+    "id": "CU23",
+    "patient_message": "Mild joint pain in my knees. Maybe from walking more than usual.",
+    "patient_history": "Patient has systemic lupus erythematosus (SLE) with history of lupus nephritis class IV. Recently tapered off steroids at own request. Lupus flares can rapidly progress to renal failure.",
+    "expected_urgency": "HIGH",
+    "is_emergency": true,
+    "category": "context_urgency",
+    "clinical_reasoning": "Joint pain in SLE patient post-steroid taper = possible lupus flare with nephritis risk"
+  },
+  {
+    "id": "CU24",
+    "patient_message": "Slight ear pain in my left ear, mild discomfort. Probably just earwax.",
+    "patient_history": "Patient has a cochlear implant in the left ear placed 3 months ago. Device infection is a serious complication that can lead to meningitis and device failure.",
+    "expected_urgency": "HIGH",
+    "is_emergency": true,
+    "category": "context_urgency",
+    "clinical_reasoning": "Ear pain over cochlear implant site = possible device infection, risk of meningitis"
+  },
+  {
+    "id": "CU25",
+    "patient_message": "I feel a little tired and have a very mild headache. It's been a long week.",
+    "patient_history": "Patient received a heart transplant 5 weeks ago. On triple immunosuppression. Fatigue and headache can be the only presenting symptoms of acute cardiac rejection in this early window.",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "context_urgency",
+    "clinical_reasoning": "Fatigue + headache 5 weeks post-heart transplant = possible acute rejection, graft function must be assessed urgently"
+  },
+  {
+    "id": "CU26",
+    "patient_message": "Minor headache after I bumped my head on a cabinet. It barely hurt when it happened.",
+    "patient_history": "Patient is on rivaroxaban (Xarelto) 20mg daily for atrial fibrillation. Has a platelet count of 60,000 due to ITP (immune thrombocytopenic purpura). Compounding coagulopathy.",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "context_urgency",
+    "clinical_reasoning": "Head trauma in anticoagulated thrombocytopenic patient = high risk of intracranial hemorrhage even from minor impact"
+  },
+  {
+    "id": "CU27",
+    "patient_message": "Mild stomach discomfort and lost my appetite today. Probably just not hungry.",
+    "patient_history": "Patient has a ventricular assist device (LVAD) implanted for end-stage heart failure. On warfarin. GI symptoms in LVAD patients are associated with GI angiodysplasia bleeding, a known LVAD complication.",
+    "expected_urgency": "HIGH",
+    "is_emergency": true,
+    "category": "context_urgency",
+    "clinical_reasoning": "GI symptoms in LVAD patient on anticoagulation = possible GI bleed from angiodysplasia, common and serious in LVAD"
+  },
+  {
+    "id": "CU28",
+    "patient_message": "A small cut on my finger from cooking. It's bleeding a little but it's tiny.",
+    "patient_history": "Patient has Glanzmann thrombasthenia, a rare platelet function disorder where platelets cannot aggregate. Even minor wounds can result in uncontrolled hemorrhage without platelet transfusion.",
+    "expected_urgency": "HIGH",
+    "is_emergency": true,
+    "category": "context_urgency",
+    "clinical_reasoning": "Any bleeding in Glanzmann thrombasthenia = cannot clot normally, requires platelet transfusion"
+  },
+  {
+    "id": "CU29",
+    "patient_message": "Mild lower abdominal pressure, not really pain. Comes and goes.",
+    "patient_history": "Patient had an abdominal aortic aneurysm (AAA) repaired with an endovascular stent graft (EVAR) 3 weeks ago. An endoleak (blood leaking around the graft) is most common in this early post-op period.",
+    "expected_urgency": "EMERGENCY",
+    "is_emergency": true,
+    "category": "context_urgency",
+    "clinical_reasoning": "Abdominal symptoms post-EVAR = possible endoleak or graft migration, can lead to aneurysm rupture"
+  },
+  {
+    "id": "CU30",
+    "patient_message": "Feeling slightly dizzy when I stand up quickly. Just happened once or twice today.",
+    "patient_history": "Patient has hypertrophic obstructive cardiomyopathy (HOCM) with severe outflow tract obstruction. Was recently started on a new antihypertensive by another provider. HOCM patients are preload-dependent and vasodilators can cause sudden collapse.",
+    "expected_urgency": "HIGH",
+    "is_emergency": true,
+    "category": "context_urgency",
+    "clinical_reasoning": "Orthostatic symptoms in HOCM patient on new vasodilator = possible outflow tract dynamic obstruction worsening — syncope risk"
+  }
+]
