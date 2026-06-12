@@ -1,0 +1,70 @@
+name: TriageAI Eval
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 2 * * *"   # nightly at 02:00 UTC
+
+jobs:
+  safety-gate:
+    name: Safety gate (zero FN required)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: python scripts/seed_policy.py
+        env:
+          LLM_GEMINI_API_KEY: ${{ secrets.LLM_GEMINI_API_KEY }}
+      - run: python scripts/run_eval.py --safety-only
+        env:
+          LLM_GEMINI_API_KEY: ${{ secrets.LLM_GEMINI_API_KEY }}
+      - name: Enforce zero false negatives
+        run: |
+          python - <<'EOF'
+          import json, sys
+          with open("tests/eval_results.json") as f:
+              data = json.load(f)
+          fn = data["safety_metrics"]["fn"]
+          if fn > 0:
+              print(f"FAIL: {fn} false negative(s) — emergencies missed.")
+              sys.exit(1)
+          print("PASS: safety recall 100%.")
+          EOF
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: safety-eval-${{ github.run_id }}
+          path: tests/eval_results.json
+
+  full-eval:
+    name: Full eval (nightly + main)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'schedule'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: python scripts/seed_policy.py
+        env:
+          LLM_GEMINI_API_KEY: ${{ secrets.LLM_GEMINI_API_KEY }}
+      - run: python scripts/run_eval.py
+        env:
+          LLM_GEMINI_API_KEY: ${{ secrets.LLM_GEMINI_API_KEY }}
+          LANGSMITH_TRACING: "true"
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+          LANGSMITH_PROJECT: "TriageAI"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: full-eval-${{ github.run_id }}
+          path: tests/eval_results.json

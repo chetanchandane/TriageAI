@@ -218,23 +218,37 @@ def _compile_graph(all_tools, triage_node_fn):
     graph.add_edge("communication_node", END)
 
     # --- Compile with persistence and HITL interrupt ---
-    # SqliteSaver persists thread state to disk so HITL thread_ids survive
-    # app restarts. Falls back to in-memory MemorySaver if sqlite unavailable.
-    try:
-        import sqlite3
-        from langgraph.checkpoint.sqlite import SqliteSaver
-        conn = sqlite3.connect(_CHECKPOINT_DB, check_same_thread=False)
-        _checkpointer = SqliteSaver(conn)
-        _checkpointer.setup()
-    except Exception:
-        from langgraph.checkpoint.memory import MemorySaver
-        import warnings
-        warnings.warn(
-            "SqliteSaver unavailable — falling back to MemorySaver (state lost on restart). "
-            "Install langgraph-checkpoint-sqlite to persist HITL threads.",
-            stacklevel=2,
-        )
-        _checkpointer = MemorySaver()
+    # Priority: PostgresSaver (DATABASE_URL set) → SqliteSaver (local dev) → MemorySaver (last resort)
+    _database_url = os.environ.get("DATABASE_URL", "")
+    if _database_url:
+        try:
+            from langgraph.checkpoint.postgres import PostgresSaver
+            _checkpointer = PostgresSaver.from_conn_string(_database_url)
+            _checkpointer.setup()  # idempotent CREATE TABLE IF NOT EXISTS
+        except Exception as _pg_err:
+            import warnings
+            warnings.warn(
+                f"PostgresSaver failed ({_pg_err}). Falling back to SqliteSaver.",
+                stacklevel=2,
+            )
+            _database_url = ""
+
+    if not _database_url:
+        try:
+            import sqlite3
+            from langgraph.checkpoint.sqlite import SqliteSaver
+            conn = sqlite3.connect(_CHECKPOINT_DB, check_same_thread=False)
+            _checkpointer = SqliteSaver(conn)
+            _checkpointer.setup()
+        except Exception:
+            from langgraph.checkpoint.memory import MemorySaver
+            import warnings
+            warnings.warn(
+                "SqliteSaver unavailable — falling back to MemorySaver "
+                "(state lost on restart). Set DATABASE_URL for persistent HITL.",
+                stacklevel=2,
+            )
+            _checkpointer = MemorySaver()
     return graph.compile(
         checkpointer=_checkpointer,
         interrupt_before=["communication_node"],

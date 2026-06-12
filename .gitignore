@@ -18,3 +18,8 @@ data/vector_store/
 
 # Logs
 logs/
+
+# LangGraph SQLite checkpoint (local dev only — production uses PostgresSaver)
+data/checkpoints.db
+data/checkpoints.db-shm
+data/checkpoints.db-wal
