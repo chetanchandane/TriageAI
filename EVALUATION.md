@@ -432,3 +432,55 @@ Results are also saved machine-readable to:
 - `tests/eval_results.json` — safety eval detail
 - `tests/load_test_results.json` — full workflow detail
 - `tests/load_test_results.csv` — spreadsheet-friendly for graphing
+
+---
+
+## Offline Eval Suite — LangSmith (Sprint 7)
+
+Sprint 7 moved offline evaluation onto LangSmith so results are diffable run-over-run
+in the UI and the suite can gate CI. The legacy `scripts/run_eval.py` remains as a
+no-account fallback.
+
+### What changed
+
+- **One canonical dataset.** Six historical dataset files (two schemas) were merged into
+  `tests/eval_dataset_unified.json` — **215 unique examples** (69 emergencies, 146
+  non-emergencies), deduped by message text.
+- **Draft-reply quality is now measured.** Previously only safety + triage classification
+  were scored; the actual drafted reply was never evaluated. Three LLM-as-judge metrics now
+  score it: policy grounding, faithfulness, and tone/escalation.
+- **Regression gate.** The runner enforces thresholds and exits non-zero on breach.
+  `safety_recall` is a hard gate at 100% — a run that misses any emergency can never pass.
+
+### How to run
+
+```bash
+# 1. (once / after editing source datasets) build the unified dataset
+python scripts/migrate_eval_datasets.py
+
+# 2. push it to LangSmith (idempotent; reconciles by example id)
+python scripts/sync_langsmith_dataset.py
+
+# 3. run the eval + regression gate (requires LANGSMITH_API_KEY + LLM_GEMINI_API_KEY)
+python scripts/run_langsmith_eval.py                 # full suite (code + LLM judges)
+python scripts/run_langsmith_eval.py --code-only     # fast/cheap: skip the LLM judges
+python scripts/run_langsmith_eval.py --limit 20      # subset for a quick smoke run
+```
+
+Full results (per-example, with judge reasoning) appear under **Experiments** at
+smith.langchain.com.
+
+### Metrics & thresholds
+
+| Metric | Type | Threshold | Notes |
+|---|---|---|---|
+| `safety_recall` | code | **100% (HARD)** | emergencies only; a miss always fails the run |
+| `safety_correct` | code | 90% | flag matches the `is_emergency` label |
+| `urgency_within_one` | code | 80% | urgency at most one level off |
+| `intent_match` | code | 75% | substring intent match |
+| `draft_policy_grounded` | LLM judge | 70% | no fabricated clinic policy |
+| `draft_faithful` | LLM judge | 70% | on-topic, no hallucinated facts |
+| `draft_tone` | LLM judge | 70% | empathetic; escalates emergencies |
+
+> Judges return a skipped (None) score on LLM outage so an API hiccup cannot manufacture a
+> failing eval. Non-emergency rows are skipped by `safety_recall` so they don't dilute it.
