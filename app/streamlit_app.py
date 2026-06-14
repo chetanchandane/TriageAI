@@ -473,6 +473,7 @@ def render_staff_view():
                         _safety, updated_triage = resume_workflow(
                             thread_id=thread_id,
                             edited_draft=edited_draft if edited_draft != existing_draft else None,
+                            ls_run_id=tr.get("ls_run_id", ""),
                         )
                         updated_triage["status"] = "Resolved/Routed"
                         updated_triage["staff_reply"] = edited_draft
@@ -568,6 +569,7 @@ def render_pending_approvals():
                             _safety, updated_triage = resume_workflow(
                                 thread_id=thread_id,
                                 edited_draft=edited_draft if edited_draft != draft else None,
+                                ls_run_id=tr.get("ls_run_id", ""),
                             )
                             # Update the message store with the approved result
                             updated_triage["status"] = "Resolved/Routed"

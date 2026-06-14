@@ -484,3 +484,59 @@ smith.langchain.com.
 
 > Judges return a skipped (None) score on LLM outage so an API hiccup cannot manufacture a
 > failing eval. Non-emergency rows are skipped by `safety_recall` so they don't dilute it.
+
+## Online Eval Suite — LangSmith (Sprint 7)
+
+Offline evals score a labeled dataset *before* merge. **Online evals score real traffic
+as it flows through the running app**, where there are no ground-truth labels. Two
+mechanisms feed the live LangSmith project (`LANGSMITH_PROJECT`):
+
+### 1. Staff-feedback capture (the gold signal)
+
+The HITL review loop already produces a human quality judgment on every reviewed draft.
+When tracing is on, `run_triage_workflow` captures the root `run_id` and the staff
+approve/edit action is logged back to that run as feedback:
+
+| Feedback key | Meaning |
+|---|---|
+| `staff_approved` | 1.0 if staff sent the draft verbatim, 0.0 if they edited it first |
+| `draft_edit_ratio` | 0.0 (approved verbatim) … 1.0 (fully rewritten) — `1 − difflib similarity` |
+
+No annotation is needed — this is a continuous, real-world proxy for draft quality. It
+fires only for messages that hit the HITL interrupt (NORMAL/HIGH/EMERGENCY); LOW/auto-
+completed messages skip review and so get judge scores but no staff feedback.
+
+### 2. Reference-free LLM-judge automations
+
+`scripts/online_evaluators.py` provides `draft_policy_grounded`, `draft_faithful`, and
+`draft_tone` variants that judge a live run using only its own inputs/outputs (the tone
+judge reads the run's own safety screen for the emergency expectation). They reuse the
+exact rubric prompts from `scripts/eval_evaluators.py`, so an online dip and an offline
+dip mean the same thing.
+
+**Wiring them as automations** (in the LangSmith UI):
+1. Open the live project → **Rules** → **Add Rule**.
+2. Set a **sampling rate** (e.g. 20%) to control judge cost on production volume.
+3. Add a **code evaluator** pointing at each function in `online_evaluators.ONLINE_EVALUATORS`.
+4. (Optional) Filter to runs named `run_triage_workflow` / tagged for live triage.
+
+Smoke-test the judges locally without LangSmith:
+
+```bash
+python scripts/online_evaluators.py
+```
+
+### Setup
+
+```bash
+# .env
+LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=...
+LANGSMITH_PROJECT=TriageAI       # live project that online evals/feedback attach to
+```
+
+> **Known limitation:** the online `draft_faithful` judge has no `patient_history` in the
+> run inputs (history is fetched via tools mid-graph, not passed in), so it can over-
+> penalize replies that reference real patient facts. Treat its online score as a
+> directional signal, not a hard gate; the offline `draft_faithful` (which has history)
+> remains authoritative.

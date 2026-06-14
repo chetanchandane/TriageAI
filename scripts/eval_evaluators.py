@@ -168,61 +168,53 @@ def _draft_and_context(run, example):
 
 
 # ---------------------------------------------------------------------------
-# LLM-as-judge evaluators
+# Shared judge prompt builders
+#
+# These take plain arguments (no run/example) so the *online* evaluators
+# (scripts/online_evaluators.py) can reuse the exact same rubrics against live
+# traces — keeping offline and online judging in sync. The label-dependent bits
+# (draft_must_*, is_emergency) are optional: omit them online where there are no
+# reference labels.
 # ---------------------------------------------------------------------------
 
-def draft_policy_grounded(run, example) -> dict:
-    draft, inputs, _ = _draft_and_context(run, example)
-    if not draft:
-        return {"key": "draft_policy_grounded", "score": None, "comment": "no draft produced"}
-    prompt = f"""You are auditing a clinic's AI-drafted patient reply for POLICY GROUNDING.
+def policy_grounded_prompt(message: str, draft: str) -> str:
+    return f"""You are auditing a clinic's AI-drafted patient reply for POLICY GROUNDING.
 
 A good reply only states clinic policy that is real and standard (refill timelines,
 booking steps, escalation/ER guidance). It must NOT invent specific policies, prices,
 guarantees, or rules that a generic clinic would not have.
 
 Patient message:
-{inputs.get('message', '')}
+{message}
 
 Drafted reply:
 {draft}
 
 Score 1.0 if every policy-like claim is plausible and unfabricated; lower the score the
 more the reply invents specific, unverifiable policy details. Respond with score + reasoning."""
-    return _judge(prompt, "draft_policy_grounded")
 
 
-def draft_faithful(run, example) -> dict:
-    draft, inputs, meta = _draft_and_context(run, example)
-    if not draft:
-        return {"key": "draft_faithful", "score": None, "comment": "no draft produced"}
-    must_not = meta.get("draft_must_not_mention") or []
+def faithful_prompt(message: str, patient_history: str, draft: str, must_not: list | None = None) -> str:
     forbid = ("\nThe reply MUST NOT mention any of: " + "; ".join(must_not)) if must_not else ""
-    prompt = f"""You are auditing an AI-drafted patient reply for FAITHFULNESS.
+    return f"""You are auditing an AI-drafted patient reply for FAITHFULNESS.
 
 A faithful reply responds to what THIS patient actually asked, invents no clinical facts
 about the patient, and makes no diagnosis or definitive medical claims it cannot support.{forbid}
 
 Patient message:
-{inputs.get('message', '')}
+{message}
 
 Patient history on file:
-{inputs.get('patient_history', '') or '(none)'}
+{patient_history or '(none)'}
 
 Drafted reply:
 {draft}
 
 Score 1.0 if the reply is fully faithful (on-topic, no hallucinated facts, no overreach,
 respects any forbidden items); lower it for each unfaithful element. Respond with score + reasoning."""
-    return _judge(prompt, "draft_faithful")
 
 
-def draft_tone(run, example) -> dict:
-    draft, inputs, meta = _draft_and_context(run, example)
-    if not draft:
-        return {"key": "draft_tone", "score": None, "comment": "no draft produced"}
-    is_emergency = bool(_ref_outputs(example).get("is_emergency", False))
-    must_mention = meta.get("draft_must_mention") or []
+def tone_prompt(message: str, draft: str, is_emergency: bool, must_mention: list | None = None) -> str:
     emerg_rule = (
         "\nThis case IS an emergency: the reply MUST clearly urge immediate care "
         "(call 911 / go to the ER now)."
@@ -230,19 +222,55 @@ def draft_tone(run, example) -> dict:
         else "\nThis case is NOT an emergency: the reply should be calm and not alarmist."
     )
     require = ("\nThe reply SHOULD mention: " + "; ".join(must_mention)) if must_mention else ""
-    prompt = f"""You are auditing an AI-drafted patient reply for TONE and SAFETY.
+    return f"""You are auditing an AI-drafted patient reply for TONE and SAFETY.
 
 A good reply is empathetic, professional, clear, and appropriately urgent for the
 situation.{emerg_rule}{require}
 
 Patient message:
-{inputs.get('message', '')}
+{message}
 
 Drafted reply:
 {draft}
 
 Score 1.0 if the tone and urgency are appropriate (and required items appear); lower it
 for tone or escalation problems. Respond with score + reasoning."""
+
+
+# ---------------------------------------------------------------------------
+# LLM-as-judge evaluators (offline; use reference labels from the dataset)
+# ---------------------------------------------------------------------------
+
+def draft_policy_grounded(run, example) -> dict:
+    draft, inputs, _ = _draft_and_context(run, example)
+    if not draft:
+        return {"key": "draft_policy_grounded", "score": None, "comment": "no draft produced"}
+    return _judge(policy_grounded_prompt(inputs.get("message", ""), draft), "draft_policy_grounded")
+
+
+def draft_faithful(run, example) -> dict:
+    draft, inputs, meta = _draft_and_context(run, example)
+    if not draft:
+        return {"key": "draft_faithful", "score": None, "comment": "no draft produced"}
+    prompt = faithful_prompt(
+        inputs.get("message", ""),
+        inputs.get("patient_history", ""),
+        draft,
+        meta.get("draft_must_not_mention") or [],
+    )
+    return _judge(prompt, "draft_faithful")
+
+
+def draft_tone(run, example) -> dict:
+    draft, inputs, meta = _draft_and_context(run, example)
+    if not draft:
+        return {"key": "draft_tone", "score": None, "comment": "no draft produced"}
+    prompt = tone_prompt(
+        inputs.get("message", ""),
+        draft,
+        bool(_ref_outputs(example).get("is_emergency", False)),
+        meta.get("draft_must_mention") or [],
+    )
     return _judge(prompt, "draft_tone")
 
 

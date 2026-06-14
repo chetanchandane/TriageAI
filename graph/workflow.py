@@ -370,6 +370,62 @@ def _get_compiled():
     return _compiled
 
 
+# ---------------------------------------------------------------------------
+# Online evals: tracing + staff-feedback capture (Sprint 7)
+# ---------------------------------------------------------------------------
+
+def _tracing_enabled() -> bool:
+    """True when LangSmith tracing is configured, so online-eval hooks should run."""
+    truthy = {"1", "true", "yes", "on"}
+    tracing = (os.environ.get("LANGSMITH_TRACING") or os.environ.get("LANGCHAIN_TRACING_V2") or "").lower()
+    has_key = bool(os.environ.get("LANGSMITH_API_KEY") or os.environ.get("LANGCHAIN_API_KEY"))
+    return tracing in truthy and has_key
+
+
+def _log_staff_feedback(run_id: str, original_draft: str, edited_draft: str | None) -> None:
+    """Attach staff-review feedback to the live LangSmith run (Pillar 2, online evals).
+
+    Two signals, both derived from the HITL approve/edit action — no labeling needed:
+      - staff_approved:   1.0 if the staff sent the draft unchanged, else 0.0
+      - draft_edit_ratio: 0.0 (verbatim approval) … 1.0 (fully rewritten); a continuous,
+                          real-world proxy for draft quality.
+
+    Fail-open: any error here must never break the staff send path.
+    """
+    if not run_id or not _tracing_enabled():
+        return
+    try:
+        import difflib
+
+        from langsmith import Client
+
+        approved = edited_draft is None
+        if approved:
+            edit_ratio = 0.0
+        else:
+            # difflib ratio is similarity in [0,1]; edit_ratio is its complement.
+            sim = difflib.SequenceMatcher(None, original_draft or "", edited_draft or "").ratio()
+            edit_ratio = round(1.0 - sim, 4)
+
+        client = Client()
+        client.create_feedback(
+            run_id,
+            key="staff_approved",
+            score=1.0 if approved else 0.0,
+            comment="approved verbatim" if approved else "edited before sending",
+        )
+        client.create_feedback(
+            run_id,
+            key="draft_edit_ratio",
+            score=edit_ratio,
+            comment=f"staff edit distance (0=verbatim, 1=rewritten): {edit_ratio}",
+        )
+    except Exception as e:  # pragma: no cover - telemetry must not break sends
+        import warnings
+
+        warnings.warn(f"LangSmith staff feedback not logged: {e}")
+
+
 def run_triage_workflow(
     patient_message: str,
     patient_id: str = "",
@@ -411,8 +467,20 @@ def run_triage_workflow(
         "staff_approved": False,
     }
 
+    # Online evals: when LangSmith tracing is on, capture the root run_id of this
+    # invocation so the HITL resume path can attach staff feedback to the exact run.
+    # No-ops (and adds no overhead) when tracing is disabled, preserving demo mode.
+    ls_run_id = ""
     try:
-        final = app.invoke(initial, config)
+        if _tracing_enabled():
+            from langchain_core.tracers.context import collect_runs
+
+            with collect_runs() as cb:
+                final = app.invoke(initial, config)
+            if cb.traced_runs:
+                ls_run_id = str(cb.traced_runs[0].id)
+        else:
+            final = app.invoke(initial, config)
     except Exception:
         # If LangGraph fails entirely, fall back
         return _run_fallback(msg, patient_id)
@@ -422,6 +490,9 @@ def run_triage_workflow(
 
     # Embed the thread_id and hitl_status into triage_result for the UI
     triage_result["thread_id"] = thread_id
+    if ls_run_id:
+        # Round-trips through the UI so resume_workflow can find the run to score.
+        triage_result["ls_run_id"] = ls_run_id
 
     # Determine if workflow was interrupted (no hitl_status means it paused before communication_node)
     hitl_status = final.get("hitl_status")
@@ -506,6 +577,7 @@ def resume_chat(thread_id: str, patient_answer: str):
 def resume_workflow(
     thread_id: str,
     edited_draft: str | None = None,
+    ls_run_id: str = "",
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """
     Resume an interrupted workflow after staff review.
@@ -514,14 +586,32 @@ def resume_workflow(
     The graph continues from where it was interrupted (communication_node) and sends
     the finalized email.
 
+    ls_run_id (online evals, Sprint 7): the LangSmith run_id captured by
+    run_triage_workflow. When provided (and tracing is on), the staff approve/edit
+    decision is logged back to that run as feedback. The UI round-trips it via
+    triage_result["ls_run_id"].
+
     Returns (safety_result dict, triage_result dict) — same shape as run_triage_workflow.
     """
     app = _get_compiled()
     config = {"configurable": {"thread_id": thread_id}}
 
+    # Snapshot the AI-generated draft *before* the staff edit so the feedback edit-ratio
+    # compares against what the model actually produced.
+    original_draft = ""
+    if ls_run_id:
+        try:
+            snap = app.get_state(config)
+            original_draft = (snap.values.get("draft_reply") or "") if snap and snap.values else ""
+        except Exception:
+            original_draft = ""
+
     # If staff edited the draft, update the state before resuming
     if edited_draft is not None:
         app.update_state(config, {"draft_reply": edited_draft})
+
+    # Online evals: record the staff approve/edit decision as LangSmith feedback.
+    _log_staff_feedback(ls_run_id, original_draft, edited_draft)
 
     # Resume execution: invoke(None, config) continues from the interrupt point
     final = app.invoke(None, config)
