@@ -23,3 +23,5 @@ logs/
 data/checkpoints.db
 data/checkpoints.db-shm
 data/checkpoints.db-wal
+
+.DS_Store

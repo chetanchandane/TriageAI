@@ -143,11 +143,11 @@ MCP_CONFIG_PATH = os.path.join(
 
 
 async def _init_mcp_tools() -> list:
-    """Discover MCP tools from chroma-mcp-server via MultiServerMCPClient.
+    """Discover MCP tools from all servers in mcp_config.json via MultiServerMCPClient.
 
-    Reads mcp_config.json, launches the Chroma MCP server as a subprocess,
-    and returns the list of LangChain-wrapped tools it exposes.
-    Caches the result so the server is only started once per process.
+    Resolves relative paths (--data-dir, cwd) to absolute so subprocesses find
+    the right files regardless of the caller's working directory.
+    Caches the result so servers are only started once per process.
     """
     global _mcp_tools
     if _mcp_tools is not None:
@@ -155,8 +155,26 @@ async def _init_mcp_tools() -> list:
 
     from langchain_mcp_adapters.client import MultiServerMCPClient
 
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
     with open(MCP_CONFIG_PATH) as f:
         config = json.load(f)
+
+    # Resolve relative paths in each server config so subprocesses work
+    # regardless of the caller's CWD.
+    for server_cfg in config.values():
+        # Resolve cwd (used by triageai-tools to find the package)
+        cwd = server_cfg.get("cwd")
+        if cwd and not os.path.isabs(cwd):
+            server_cfg["cwd"] = os.path.normpath(os.path.join(project_root, cwd))
+
+        # Resolve --data-dir for chroma-mcp-server
+        args = server_cfg.get("args", [])
+        for i, arg in enumerate(args):
+            if arg == "--data-dir" and i + 1 < len(args):
+                data_dir = args[i + 1]
+                if not os.path.isabs(data_dir):
+                    args[i + 1] = os.path.normpath(os.path.join(project_root, data_dir))
 
     client = MultiServerMCPClient(config)
     _mcp_tools = await client.get_tools()
@@ -256,9 +274,15 @@ def _compile_graph(all_tools, triage_node_fn):
 
 
 async def build_graph_async():
-    """Build graph with MCP-discovered tools merged with LOCAL_TOOLS."""
+    """Build graph with MCP-discovered tools merged with LOCAL_TOOLS.
+
+    MCP tools take priority: local tools whose names are already provided
+    by an MCP server are excluded to avoid duplicate tool definitions.
+    """
     mcp_tools = await _init_mcp_tools()
-    all_tools = LOCAL_TOOLS + list(mcp_tools)
+    mcp_tool_names = {t.name for t in mcp_tools}
+    local_tools = [t for t in LOCAL_TOOLS if t.name not in mcp_tool_names]
+    all_tools = local_tools + list(mcp_tools)
     triage_node = _make_triage_agent_node(all_tools)
     return _compile_graph(all_tools, triage_node)
 

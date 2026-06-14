@@ -21,17 +21,6 @@ VECTOR_STORE_PATH = os.path.join(
     "vector_store",
 )
 
-# Default policy snippets (in production, load from files or CMS)
-DEFAULT_POLICIES = [
-    "Prescription refills: Patients should request refills at least 48 hours before running out. Include medication name, dosage, and pharmacy.",
-    "Appointments: For non-urgent issues, book via the patient portal or call during office hours. Same-day slots may be limited.",
-    "Clinical questions: Non-urgent questions are answered within 2 business days. Include relevant history and current medications.",
-    "Billing: Billing questions are handled by the Billing department. Have your account number and statement ready.",
-    "Emergency: If you are experiencing a life-threatening emergency, call 911 or go to the nearest ER. Do not wait for a portal response.",
-    "Lab results: Results are released in the portal when available. Normal turnaround is 3-5 business days.",
-    "Referrals: Specialist referrals require prior authorization. Allow 5-7 business days for processing.",
-]
-
 _collection = None
 
 
@@ -46,12 +35,8 @@ def _get_collection():
         client = chromadb.PersistentClient(path=VECTOR_STORE_PATH)
         coll = client.get_or_create_collection(
             "hospital_policies",
-            metadata={"description": "Clinic policy snippets"},
+            metadata={"description": "Hospital policy documents"},
         )
-        # Inline fallback seed if store is empty (e.g. seed script not yet run)
-        if coll.count() == 0:
-            ids = [f"policy_{i}" for i in range(len(DEFAULT_POLICIES))]
-            coll.add(documents=DEFAULT_POLICIES, ids=ids)
         _collection = coll
         return coll
     except Exception:

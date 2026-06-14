@@ -1,18 +1,17 @@
 """
-Seed the persistent ChromaDB vector store with default hospital policy documents.
+Seed the persistent ChromaDB vector store from real hospital policy PDFs.
 
-Usage (run once from project root):
-    python scripts/seed_policy.py
+Usage (run from project root):
+    python scripts/seed_policy.py                # skip if collection already populated
+    python scripts/seed_policy.py --force        # wipe collection and reseed from PDFs
 
-Idempotent: safe to run multiple times. Skips seeding if the collection already
-has documents.
-
+Place PDF files in data/policies/ before running.
 Output directory: ./data/vector_store/
 """
+import argparse
 import os
 import sys
 
-# Ensure project root is on sys.path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import chromadb
@@ -22,36 +21,113 @@ VECTOR_STORE_PATH = os.path.join(
     "data",
     "vector_store",
 )
-
+POLICIES_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "data",
+    "policies",
+)
 COLLECTION_NAME = "hospital_policies"
 
-DEFAULT_POLICIES = [
-    "Prescription refills: Patients should request refills at least 48 hours before running out. Include medication name, dosage, and pharmacy.",
-    "Appointments: For non-urgent issues, book via the patient portal or call during office hours. Same-day slots may be limited.",
-    "Clinical questions: Non-urgent questions are answered within 2 business days. Include relevant history and current medications.",
-    "Billing: Billing questions are handled by the Billing department. Have your account number and statement ready.",
-    "Emergency: If you are experiencing a life-threatening emergency, call 911 or go to the nearest ER. Do not wait for a portal response.",
-    "Lab results: Results are released in the portal when available. Normal turnaround is 3-5 business days.",
-    "Referrals: Specialist referrals require prior authorization. Allow 5-7 business days for processing.",
-]
+CHUNK_SIZE = 700      # characters per chunk
+CHUNK_OVERLAP = 100   # overlap between consecutive chunks
 
 
-def seed():
+def _extract_text_from_pdf(path: str) -> str:
+    """Extract plain text from a PDF file using pypdf."""
+    try:
+        from pypdf import PdfReader
+        reader = PdfReader(path)
+        pages = []
+        for page in reader.pages:
+            text = page.extract_text() or ""
+            pages.append(text.strip())
+        return "\n\n".join(p for p in pages if p)
+    except Exception as e:
+        print(f"  [warn] Could not parse {path}: {e}")
+        return ""
+
+
+def _chunk_text(text: str, source: str) -> list[dict]:
+    """Split text into overlapping chunks, tagging each with its source filename."""
+    chunks = []
+    start = 0
+    idx = 0
+    while start < len(text):
+        end = start + CHUNK_SIZE
+        chunk = text[start:end].strip()
+        if chunk:
+            chunks.append({"text": chunk, "source": source, "chunk_idx": idx})
+            idx += 1
+        start += CHUNK_SIZE - CHUNK_OVERLAP
+    return chunks
+
+
+def load_pdfs() -> list[dict]:
+    """Walk POLICIES_DIR, parse every PDF, return list of chunk dicts."""
+    if not os.path.isdir(POLICIES_DIR):
+        print(f"[error] Policies directory not found: {POLICIES_DIR}")
+        print("  Create data/policies/ and place your PDF files there.")
+        sys.exit(1)
+
+    pdf_files = [f for f in os.listdir(POLICIES_DIR) if f.lower().endswith(".pdf")]
+    if not pdf_files:
+        print(f"[error] No PDF files found in {POLICIES_DIR}")
+        sys.exit(1)
+
+    all_chunks = []
+    for fname in sorted(pdf_files):
+        path = os.path.join(POLICIES_DIR, fname)
+        print(f"  Parsing: {fname}")
+        text = _extract_text_from_pdf(path)
+        if not text:
+            print(f"  [skip] No text extracted from {fname}")
+            continue
+        chunks = _chunk_text(text, source=fname)
+        print(f"    → {len(chunks)} chunks")
+        all_chunks.extend(chunks)
+
+    return all_chunks
+
+
+def seed(force: bool = False):
     os.makedirs(VECTOR_STORE_PATH, exist_ok=True)
     client = chromadb.PersistentClient(path=VECTOR_STORE_PATH)
+
+    if force:
+        print(f"--force: deleting existing '{COLLECTION_NAME}' collection.")
+        try:
+            client.delete_collection(COLLECTION_NAME)
+        except Exception:
+            pass
+
     coll = client.get_or_create_collection(
         COLLECTION_NAME,
-        metadata={"description": "Clinic policy snippets"},
+        metadata={"description": "Hospital policy documents"},
     )
 
-    if coll.count() >= len(DEFAULT_POLICIES):
-        print(f"Collection '{COLLECTION_NAME}' already has {coll.count()} docs — skipping seed.")
+    if not force and coll.count() > 0:
+        print(f"Collection '{COLLECTION_NAME}' already has {coll.count()} chunks — skipping.")
+        print("  Run with --force to wipe and reseed.")
         return
 
-    ids = [f"policy_{i}" for i in range(len(DEFAULT_POLICIES))]
-    coll.upsert(documents=DEFAULT_POLICIES, ids=ids)
-    print(f"Seeded {len(DEFAULT_POLICIES)} documents into '{COLLECTION_NAME}' at {VECTOR_STORE_PATH}")
+    print(f"Loading PDFs from: {POLICIES_DIR}")
+    chunks = load_pdfs()
+
+    if not chunks:
+        print("[error] No chunks produced — nothing seeded.")
+        sys.exit(1)
+
+    ids = [f"{c['source']}__chunk_{c['chunk_idx']}" for c in chunks]
+    documents = [c["text"] for c in chunks]
+    metadatas = [{"source": c["source"], "chunk_idx": c["chunk_idx"]} for c in chunks]
+
+    coll.upsert(documents=documents, ids=ids, metadatas=metadatas)
+    print(f"\nSeeded {len(chunks)} chunks from {len(set(c['source'] for c in chunks))} PDF(s) into '{COLLECTION_NAME}'.")
+    print(f"Store location: {VECTOR_STORE_PATH}")
 
 
 if __name__ == "__main__":
-    seed()
+    parser = argparse.ArgumentParser(description="Seed ChromaDB with hospital policy PDFs.")
+    parser.add_argument("--force", action="store_true", help="Wipe existing collection and reseed.")
+    args = parser.parse_args()
+    seed(force=args.force)
