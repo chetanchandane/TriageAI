@@ -133,7 +133,10 @@ def _auto_communicate_node(state: TriageWorkflowState) -> dict[str, Any]:
 _compiled: Any = None
 _checkpointer: Any = None
 
-# Module-level MCP singleton (populated by _init_mcp_tools)
+# Module-level MCP singletons (populated by _init_mcp_tools).
+# _mcp_client must stay alive for the process lifetime — the MultiServerMCPClient
+# manages the stdio subprocess connections; letting it be GC'd kills the processes.
+_mcp_client: Any = None
 _mcp_tools: list | None = None
 
 MCP_CONFIG_PATH = os.path.join(
@@ -148,8 +151,11 @@ async def _init_mcp_tools() -> list:
     Resolves relative paths (--data-dir, cwd) to absolute so subprocesses find
     the right files regardless of the caller's working directory.
     Caches the result so servers are only started once per process.
+
+    The client is stored in _mcp_client (module-level) to keep the stdio subprocess
+    connections alive for the lifetime of the process — GC'ing the client kills them.
     """
-    global _mcp_tools
+    global _mcp_client, _mcp_tools
     if _mcp_tools is not None:
         return _mcp_tools
 
@@ -176,8 +182,8 @@ async def _init_mcp_tools() -> list:
                 if not os.path.isabs(data_dir):
                     args[i + 1] = os.path.normpath(os.path.join(project_root, data_dir))
 
-    client = MultiServerMCPClient(config)
-    _mcp_tools = await client.get_tools()
+    _mcp_client = MultiServerMCPClient(config)  # kept alive — owns the subprocess connections
+    _mcp_tools = await _mcp_client.get_tools()
     return _mcp_tools
 
 
@@ -283,12 +289,15 @@ async def build_graph_async():
     mcp_tool_names = {t.name for t in mcp_tools}
     local_tools = [t for t in LOCAL_TOOLS if t.name not in mcp_tool_names]
     all_tools = local_tools + list(mcp_tools)
+    tool_names = [t.name for t in all_tools]
+    print(f"[TriageAI] MCP path active — tools: {tool_names}")
     triage_node = _make_triage_agent_node(all_tools)
     return _compile_graph(all_tools, triage_node)
 
 
 def _build_graph_local_only():
-    """Build graph using only local TRIAGE_TOOLS (Sprint 3 behavior)."""
+    """Build graph using only local TRIAGE_TOOLS (MCP unavailable fallback)."""
+    print(f"[TriageAI] Local-only path active — tools: {[t.name for t in TRIAGE_TOOLS]}")
     return _compile_graph(TRIAGE_TOOLS, triage_agent_node)
 
 

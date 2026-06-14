@@ -58,10 +58,12 @@ def get_available_slots() -> str:
     return ", ".join(slots)
 
 
-# Local (non-MCP) tools — always available
-LOCAL_TOOLS = [get_patient_history, get_available_slots]
+# Local tool wrappers — merged into the MCP tool set for any tool the MCP server
+# doesn't cover (de-duped by name in build_graph_async).
+LOCAL_TOOLS = [get_patient_history, search_hospital_policy, get_available_slots]
 
-# Full tool list including local RAG — used as fallback when MCP is unavailable
+# Identical to LOCAL_TOOLS; used as the full tool set in the local-only fallback
+# path when MCP is unavailable.
 TRIAGE_TOOLS = [get_patient_history, search_hospital_policy, get_available_slots]
 
 
