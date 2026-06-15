@@ -264,12 +264,13 @@ def _compile_graph(all_tools, triage_node_fn):
             conn = sqlite3.connect(_CHECKPOINT_DB, check_same_thread=False)
             _checkpointer = SqliteSaver(conn)
             _checkpointer.setup()
-        except Exception:
+        except Exception as _sqlite_err:
             from langgraph.checkpoint.memory import MemorySaver
             import warnings
             warnings.warn(
-                "SqliteSaver unavailable — falling back to MemorySaver "
-                "(state lost on restart). Set DATABASE_URL for persistent HITL.",
+                f"SqliteSaver unavailable ({type(_sqlite_err).__name__}: {_sqlite_err}) "
+                "— falling back to MemorySaver (state lost on restart). "
+                "Set DATABASE_URL for persistent HITL.",
                 stacklevel=2,
             )
             _checkpointer = MemorySaver()

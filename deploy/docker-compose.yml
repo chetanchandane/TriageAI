@@ -1,0 +1,31 @@
+# TriageAI deployment.
+#
+# Quick start (run from the repo root):
+#   1. cp .env.example .env   # set at least LLM_GEMINI_API_KEY
+#   2. docker compose -f deploy/docker-compose.yml up --build
+#   3. open http://localhost:8501
+#
+# Persistence: the vector store and HITL checkpoint DB are named volumes, so
+# patient interrupts survive `docker compose restart`. For multi-replica or
+# durable production HITL, set DATABASE_URL to a Postgres DSN (PostgresSaver) —
+# the SqliteSaver volume is single-container only.
+services:
+  triageai:
+    build:
+      # Context is the repo root (one level up) so the whole app is available
+      # to COPY; the Dockerfile lives here in deploy/.
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: triageai:latest
+    ports:
+      - "8501:8501"
+    env_file:
+      - ../.env
+    volumes:
+      - vector_store:/app/data/vector_store
+      - checkpoints:/app/data
+    restart: unless-stopped
+
+volumes:
+  vector_store:
+  checkpoints:

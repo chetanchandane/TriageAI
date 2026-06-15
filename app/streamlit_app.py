@@ -161,6 +161,7 @@ def _stream_and_display(app, inputs, config, patient):
     from graph.workflow import get_workflow_state
 
     full_response = ""
+    ls_run_id = ""
     with st.chat_message("assistant"):
         text_area = st.empty()
         status_area = st.empty()
@@ -169,6 +170,9 @@ def _stream_and_display(app, inputs, config, patient):
             if event["type"] == "token":
                 full_response += event["content"]
                 text_area.markdown(full_response + " **|**")
+            elif event["type"] == "run_id":
+                # Online evals (Pillar 2): keep the LangSmith run_id for staff feedback.
+                ls_run_id = event["content"]
             elif event["type"] == "status":
                 # Show status with a pulsing dot indicator
                 status_area.markdown(
@@ -205,6 +209,9 @@ def _stream_and_display(app, inputs, config, patient):
 
         # Embed thread_id and hitl_status
         triage_result["thread_id"] = thread_id
+        if ls_run_id:
+            # Round-trips to the staff approval so feedback attaches to this run.
+            triage_result["ls_run_id"] = ls_run_id
         hitl_status = state.get("hitl_status")
         if hitl_status:
             triage_result["hitl_status"] = hitl_status

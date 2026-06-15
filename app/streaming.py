@@ -62,30 +62,49 @@ def stream_graph(app, inputs, config):
 
     last_node = None
 
+    # Online evals (Pillar 2): when LangSmith tracing is on, collect this stream's
+    # root run_id so the HITL approve/edit can later attach staff feedback to it.
+    # collect_runs() registers a callback via contextvars; because app.stream() runs
+    # *inside* the with-block, its runs are captured. No-ops when tracing is off.
+    import contextlib
+
     try:
-        for chunk, metadata in app.stream(inputs, config, stream_mode="messages"):
-            # Track node transitions for status updates
-            current_node = metadata.get("langgraph_node", "")
-            if current_node and current_node != last_node:
-                last_node = current_node
-                node_label = _get_node_label(current_node)
-                if node_label:
-                    yield {"type": "status", "content": node_label}
+        from graph.workflow import _tracing_enabled
+        _tracing = _tracing_enabled()
+    except Exception:
+        _tracing = False
 
-            # Tool-call status — the AI is requesting a tool
-            if isinstance(chunk, (AIMessage, AIMessageChunk)):
-                if hasattr(chunk, "tool_calls") and chunk.tool_calls:
-                    for tc in chunk.tool_calls:
-                        tool_name = tc.get("name", "tool")
-                        yield {"type": "status", "content": _get_tool_label(tool_name)}
-                # Streamed text tokens — skip internal nodes (raw JSON assessments)
-                elif current_node not in _INTERNAL_NODES and hasattr(chunk, "content") and isinstance(chunk.content, str) and chunk.content.strip():
-                    yield {"type": "token", "content": chunk.content}
+    if _tracing:
+        from langchain_core.tracers.context import collect_runs
+        _collector = collect_runs()
+    else:
+        _collector = contextlib.nullcontext()
 
-            # Tool results — show a brief status that data came back
-            elif isinstance(chunk, ToolMessage):
-                tool_name = getattr(chunk, "name", "tool")
-                yield {"type": "status", "content": f"Received results from {_get_tool_label(tool_name).lower()}"}
+    try:
+        with _collector as cb:
+            for chunk, metadata in app.stream(inputs, config, stream_mode="messages"):
+                # Track node transitions for status updates
+                current_node = metadata.get("langgraph_node", "")
+                if current_node and current_node != last_node:
+                    last_node = current_node
+                    node_label = _get_node_label(current_node)
+                    if node_label:
+                        yield {"type": "status", "content": node_label}
+
+                # Tool-call status — the AI is requesting a tool
+                if isinstance(chunk, (AIMessage, AIMessageChunk)):
+                    if hasattr(chunk, "tool_calls") and chunk.tool_calls:
+                        for tc in chunk.tool_calls:
+                            tool_name = tc.get("name", "tool")
+                            yield {"type": "status", "content": _get_tool_label(tool_name)}
+                    # Streamed text tokens — skip internal nodes (raw JSON assessments)
+                    elif current_node not in _INTERNAL_NODES and hasattr(chunk, "content") and isinstance(chunk.content, str) and chunk.content.strip():
+                        yield {"type": "token", "content": chunk.content}
+
+                # Tool results — show a brief status that data came back
+                elif isinstance(chunk, ToolMessage):
+                    tool_name = getattr(chunk, "name", "tool")
+                    yield {"type": "status", "content": f"Received results from {_get_tool_label(tool_name).lower()}"}
 
     except Exception as e:
         yield {"type": "error", "content": f"Workflow stream failed: {e}"}
@@ -104,5 +123,9 @@ def stream_graph(app, inputs, config):
                     return
     except Exception:
         pass
+
+    # Surface the captured run_id so the UI can persist it on triage_result.
+    if _tracing and cb is not None and getattr(cb, "traced_runs", None):
+        yield {"type": "run_id", "content": str(cb.traced_runs[0].id)}
 
     yield {"type": "done", "content": ""}
