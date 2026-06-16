@@ -15,6 +15,11 @@ load_dotenv()
 # Update this once you have a verified domain in your Resend dashboard.
 _DEFAULT_FROM = os.environ.get("RESEND_FROM_EMAIL", "TriageAI <onboarding@resend.dev>")
 
+# Resend test mode (no verified domain) only delivers to your own account email,
+# so every outgoing email is redirected here regardless of the real recipient.
+# Remove this once a domain is verified in the Resend dashboard.
+_FIXED_RECIPIENT = "chetanchandane10@gmail.com"
+
 
 def send_resolution_email(patient_email: str, subject: str, body: str) -> bool:
     """
@@ -23,6 +28,12 @@ def send_resolution_email(patient_email: str, subject: str, body: str) -> bool:
     """
     # Resend rejects newlines in the subject field — collapse to a single line.
     subject = " ".join(subject.splitlines()).strip()
+
+    # Test mode: redirect everything to the verified account inbox; keep the
+    # intended recipient visible in the subject so you can tell who it was for.
+    if patient_email != _FIXED_RECIPIENT:
+        subject = f"[for {patient_email}] {subject}"
+    patient_email = _FIXED_RECIPIENT
 
     api_key = os.environ.get("RESEND_API_KEY")
 

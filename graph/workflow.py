@@ -187,6 +187,57 @@ async def _init_mcp_tools() -> list:
     return _mcp_tools
 
 
+# ---------------------------------------------------------------------------
+# Sync bridge for async-only MCP tools
+# ---------------------------------------------------------------------------
+# langchain-mcp-adapters returns StructuredTools that ONLY implement the async
+# path (coroutine); their sync _run raises "StructuredTool does not support sync
+# invocation." The graph is driven synchronously (app.invoke / app.stream) with a
+# sync SqliteSaver, so ToolNode calls the sync path and blows up the moment the
+# agent uses an MCP tool. Rather than convert the whole stack to async (which
+# would also force an async checkpointer), we run each MCP tool's coroutine on a
+# single persistent background event loop and expose a sync wrapper. One loop on
+# one daemon thread keeps every MCP stdio connection on a consistent loop.
+_bg_loop: Any = None
+
+
+def _get_bg_loop():
+    """Lazily start a single background event loop on a daemon thread."""
+    global _bg_loop
+    if _bg_loop is None:
+        import threading
+
+        _bg_loop = asyncio.new_event_loop()
+        threading.Thread(target=_bg_loop.run_forever, daemon=True).start()
+    return _bg_loop
+
+
+def _run_coro_sync(coro):
+    """Run an awaitable to completion on the background loop, blocking the caller."""
+    return asyncio.run_coroutine_threadsafe(coro, _get_bg_loop()).result()
+
+
+def _make_sync_mcp_tool(async_tool):
+    """Wrap an async-only MCP tool so ToolNode's sync path can call it.
+
+    Preserves name/description/args_schema (so the bound LLM schema is identical)
+    and keeps the original coroutine, while adding a sync func that bridges to the
+    background loop.
+    """
+    from langchain_core.tools import StructuredTool
+
+    def _sync_call(**kwargs):
+        return _run_coro_sync(async_tool.ainvoke(kwargs))
+
+    return StructuredTool(
+        name=async_tool.name,
+        description=async_tool.description,
+        args_schema=async_tool.args_schema,
+        func=_sync_call,
+        coroutine=async_tool.coroutine,
+    )
+
+
 _CHECKPOINT_DB = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     "data",
@@ -286,7 +337,7 @@ async def build_graph_async():
     MCP tools take priority: local tools whose names are already provided
     by an MCP server are excluded to avoid duplicate tool definitions.
     """
-    mcp_tools = await _init_mcp_tools()
+    mcp_tools = [_make_sync_mcp_tool(t) for t in await _init_mcp_tools()]
     mcp_tool_names = {t.name for t in mcp_tools}
     local_tools = [t for t in LOCAL_TOOLS if t.name not in mcp_tool_names]
     all_tools = local_tools + list(mcp_tools)
