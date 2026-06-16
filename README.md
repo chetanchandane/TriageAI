@@ -6,6 +6,7 @@ colorTo: indigo
 sdk: docker
 app_port: 8501
 pinned: false
+license: apache-2.0
 short_description: Agentic clinical-triage system (RIT capstone)
 ---
 
