@@ -1,3 +1,18 @@
+---
+title: TriageAI
+emoji: 🏥
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 8501
+pinned: false
+short_description: Agentic clinical-triage system (RIT capstone)
+---
+
+<!-- The YAML block above is Hugging Face Spaces config (read by the Hub when
+     this repo is a Space). It is harmless on GitHub. sdk: docker builds the
+     root Dockerfile; app_port must match the port Streamlit binds to. -->
+
 # TriageAI — Agentic Clinical Triage System
 
 > **An autonomous multi-agent AI system that triages patient portal messages with clinical-grade safety, grounding every decision in patient history and hospital policy before a human ever reads it.**

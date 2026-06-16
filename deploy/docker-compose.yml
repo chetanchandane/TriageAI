@@ -7,23 +7,23 @@
 #
 # Persistence: HITL checkpoints live in Supabase Postgres (set DATABASE_URL in
 # .env → PostgresSaver). Only the ChromaDB policy store needs a local volume.
-# If DATABASE_URL is unset the code falls back to SqliteSaver at
-# /app/data/checkpoints.db, which is ephemeral here — re-add a volume on /app/data
-# if you ever run without Postgres.
+# If DATABASE_URL is unset the code falls back to SqliteSaver under data/, which
+# is ephemeral here — re-add a volume on /home/user/app/data if you run without
+# Postgres. The image runs as UID 1000 with WORKDIR /home/user/app.
 services:
   triageai:
     build:
-      # Context is the repo root (one level up) so the whole app is available
-      # to COPY; the Dockerfile lives here in deploy/.
+      # Context is the repo root (one level up). The Dockerfile lives at the repo
+      # root (required by Hugging Face Spaces; shared by Render and Compose).
       context: ..
-      dockerfile: deploy/Dockerfile
+      dockerfile: Dockerfile
     image: triageai:latest
     ports:
       - "8501:8501"
     env_file:
       - ../.env
     volumes:
-      - vector_store:/app/data/vector_store
+      - vector_store:/home/user/app/data/vector_store
     restart: unless-stopped
 
 volumes:
