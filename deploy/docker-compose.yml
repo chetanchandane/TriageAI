@@ -5,10 +5,11 @@
 #   2. docker compose -f deploy/docker-compose.yml up --build
 #   3. open http://localhost:8501
 #
-# Persistence: the vector store and HITL checkpoint DB are named volumes, so
-# patient interrupts survive `docker compose restart`. For multi-replica or
-# durable production HITL, set DATABASE_URL to a Postgres DSN (PostgresSaver) —
-# the SqliteSaver volume is single-container only.
+# Persistence: HITL checkpoints live in Supabase Postgres (set DATABASE_URL in
+# .env → PostgresSaver). Only the ChromaDB policy store needs a local volume.
+# If DATABASE_URL is unset the code falls back to SqliteSaver at
+# /app/data/checkpoints.db, which is ephemeral here — re-add a volume on /app/data
+# if you ever run without Postgres.
 services:
   triageai:
     build:
@@ -23,9 +24,7 @@ services:
       - ../.env
     volumes:
       - vector_store:/app/data/vector_store
-      - checkpoints:/app/data
     restart: unless-stopped
 
 volumes:
   vector_store:
-  checkpoints:
