@@ -74,12 +74,16 @@ _DEFAULTS: dict[str, object] = {
     "mcp_transport": "stdio",
     "mcp_host": "0.0.0.0",
     "mcp_port": 8000,
-    # LangSmith (legacy tracing path; OTel migration planned — see DEPLOYMENT_PLAN.md)
+    # LangSmith (legacy tracing path; OTel is the primary — see telemetry.py)
     "langsmith_tracing": "",
     "langchain_tracing_v2": "",
     "langsmith_api_key": "",
     "langchain_api_key": "",
     "langsmith_project": "TriageAI",
+    # OpenTelemetry (Sprint 9, M4)
+    "otel_enabled": False,
+    "otel_exporter_otlp_endpoint": "http://localhost:6006",
+    "otel_service_name": "triageai-app",
 }
 
 try:
@@ -112,6 +116,9 @@ try:
         langsmith_api_key: str = ""
         langchain_api_key: str = ""
         langsmith_project: str = "TriageAI"
+        otel_enabled: bool = False
+        otel_exporter_otlp_endpoint: str = "http://localhost:6006"
+        otel_service_name: str = "triageai-app"
 
 except ImportError:  # pragma: no cover — exercised when pydantic-settings absent
 
@@ -122,12 +129,16 @@ except ImportError:  # pragma: no cover — exercised when pydantic-settings abs
             try:
                 from dotenv import load_dotenv
                 load_dotenv(_ENV_FILE)
-            except ImportError:
+            except Exception:
+                # ImportError (dotenv absent) or OSError (unreadable .env, e.g.
+                # cloud-synced placeholder file) — settings still come from os.environ.
                 pass
             for field, default in _DEFAULTS.items():
                 raw = os.environ.get(field.upper())
                 if raw is None:
                     value = overrides.get(field, default)
+                elif isinstance(default, bool):  # before int — bool is an int subclass
+                    value = raw.strip().lower() in _TRUTHY
                 elif isinstance(default, int):
                     try:
                         value = int(raw)

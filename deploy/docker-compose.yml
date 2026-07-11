@@ -31,6 +31,10 @@ services:
     environment:
       MCP_SERVER_URL: http://mcp:8000/mcp
       MCP_AUTH_TOKEN: ${MCP_AUTH_TOKEN:-dev-local-token}
+      # OTel → Phoenix (set OTEL_ENABLED=1 in .env and start with --profile observability)
+      OTEL_ENABLED: ${OTEL_ENABLED:-0}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://phoenix:6006
+      OTEL_SERVICE_NAME: triageai-app
     depends_on:
       - mcp
     restart: unless-stopped
@@ -48,6 +52,9 @@ services:
       MCP_TRANSPORT: streamable-http
       MCP_PORT: "8000"
       MCP_AUTH_TOKEN: ${MCP_AUTH_TOKEN:-dev-local-token}
+      OTEL_ENABLED: ${OTEL_ENABLED:-0}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://phoenix:6006
+      OTEL_SERVICE_NAME: triageai-mcp
     restart: unless-stopped
 
   phoenix:

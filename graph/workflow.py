@@ -452,6 +452,13 @@ def _get_compiled():
     """Lazy-build and cache the compiled graph."""
     global _compiled
     if _compiled is None:
+        # OTel first (Sprint 9, M4): instrumentors must be installed before the
+        # first traced call. Idempotent, fail-open, no-op unless OTEL_ENABLED.
+        try:
+            from telemetry import init_telemetry
+            init_telemetry()
+        except Exception:
+            pass
         _compiled = build_graph()
     return _compiled
 
@@ -467,30 +474,46 @@ def _tracing_enabled() -> bool:
     return get_settings().tracing_enabled
 
 
-def _log_staff_feedback(run_id: str, original_draft: str, edited_draft: str | None) -> None:
-    """Attach staff-review feedback to the live LangSmith run (Pillar 2, online evals).
+def _log_staff_feedback(
+    run_id: str,
+    original_draft: str,
+    edited_draft: str | None,
+    thread_id: str = "",
+) -> None:
+    """Record staff-review feedback (Pillar 2, online evals).
 
     Two signals, both derived from the HITL approve/edit action — no labeling needed:
       - staff_approved:   1.0 if the staff sent the draft unchanged, else 0.0
       - draft_edit_ratio: 0.0 (verbatim approval) … 1.0 (fully rewritten); a continuous,
                           real-world proxy for draft quality.
 
-    Fail-open: any error here must never break the staff send path.
+    Sinks (Sprint 9, M4): primary is an OTel "staff_review" span (correlated by
+    thread_id — see telemetry.log_staff_feedback), queryable in Phoenix. The
+    LangSmith feedback path is retained as the legacy sink when tracing is
+    configured there. Fail-open: any error here must never break the staff send path.
     """
+    import difflib
+
+    approved = edited_draft is None
+    if approved:
+        edit_ratio = 0.0
+    else:
+        # difflib ratio is similarity in [0,1]; edit_ratio is its complement.
+        sim = difflib.SequenceMatcher(None, original_draft or "", edited_draft or "").ratio()
+        edit_ratio = round(1.0 - sim, 4)
+
+    # --- OTel sink (primary) ---
+    try:
+        from telemetry import log_staff_feedback
+        log_staff_feedback(approved, edit_ratio, thread_id=thread_id)
+    except Exception:
+        pass
+
+    # --- LangSmith sink (legacy) ---
     if not run_id or not _tracing_enabled():
         return
     try:
-        import difflib
-
         from langsmith import Client
-
-        approved = edited_draft is None
-        if approved:
-            edit_ratio = 0.0
-        else:
-            # difflib ratio is similarity in [0,1]; edit_ratio is its complement.
-            sim = difflib.SequenceMatcher(None, original_draft or "", edited_draft or "").ratio()
-            edit_ratio = round(1.0 - sim, 4)
 
         client = Client()
         client.create_feedback(
@@ -569,20 +592,28 @@ def run_triage_workflow(
         initial["file_mime_type"] = file_mime_type or None
         initial["file_name"] = file_name or None
 
-    # Online evals: when LangSmith tracing is on, capture the root run_id of this
-    # invocation so the HITL resume path can attach staff feedback to the exact run.
-    # No-ops (and adds no overhead) when tracing is disabled, preserving demo mode.
+    # Tracing (Sprint 9, M4): wrap the invocation in an OTel root span so the
+    # whole graph run nests under one trace (thread_id attached for correlation
+    # with later staff_review spans). workflow_span yields None when OTel is
+    # off/unavailable — zero overhead in demo mode. The legacy LangSmith
+    # collect_runs path is retained for run_id-addressed feedback.
+    try:
+        from telemetry import workflow_span
+    except Exception:  # telemetry module unimportable — trace nothing
+        from contextlib import nullcontext as workflow_span  # type: ignore[assignment]
+
     ls_run_id = ""
     try:
-        if _tracing_enabled():
-            from langchain_core.tracers.context import collect_runs
+        with workflow_span("triage_workflow", {"thread_id": thread_id}):
+            if _tracing_enabled():
+                from langchain_core.tracers.context import collect_runs
 
-            with collect_runs() as cb:
+                with collect_runs() as cb:
+                    final = app.invoke(initial, config)
+                if cb.traced_runs:
+                    ls_run_id = str(cb.traced_runs[0].id)
+            else:
                 final = app.invoke(initial, config)
-            if cb.traced_runs:
-                ls_run_id = str(cb.traced_runs[0].id)
-        else:
-            final = app.invoke(initial, config)
     except Exception:
         # If LangGraph fails entirely, fall back
         return _run_fallback(msg, patient_id)
@@ -699,21 +730,21 @@ def resume_workflow(
     config = {"configurable": {"thread_id": thread_id}}
 
     # Snapshot the AI-generated draft *before* the staff edit so the feedback edit-ratio
-    # compares against what the model actually produced.
+    # compares against what the model actually produced. (Sprint 9: no longer gated on
+    # ls_run_id — the OTel feedback sink needs it regardless of LangSmith.)
     original_draft = ""
-    if ls_run_id:
-        try:
-            snap = app.get_state(config)
-            original_draft = (snap.values.get("draft_reply") or "") if snap and snap.values else ""
-        except Exception:
-            original_draft = ""
+    try:
+        snap = app.get_state(config)
+        original_draft = (snap.values.get("draft_reply") or "") if snap and snap.values else ""
+    except Exception:
+        original_draft = ""
 
     # If staff edited the draft, update the state before resuming
     if edited_draft is not None:
         app.update_state(config, {"draft_reply": edited_draft})
 
-    # Online evals: record the staff approve/edit decision as LangSmith feedback.
-    _log_staff_feedback(ls_run_id, original_draft, edited_draft)
+    # Online evals: record the staff approve/edit decision (OTel span + legacy LangSmith).
+    _log_staff_feedback(ls_run_id, original_draft, edited_draft, thread_id=thread_id)
 
     # Resume execution: invoke(None, config) continues from the interrupt point
     final = app.invoke(None, config)

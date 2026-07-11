@@ -36,12 +36,24 @@ from mcp.server.fastmcp import FastMCP
 mcp = FastMCP("triageai-tools")
 
 
+def _tool_span(name: str, attributes: dict | None = None):
+    """Manual OTel span (Sprint 9, M4) — the tool server has no auto-instrumentor.
+    Fail-open: if telemetry is unimportable/off, returns a no-op context."""
+    try:
+        from telemetry import tool_span
+        return tool_span(name, attributes)
+    except Exception:
+        from contextlib import nullcontext
+        return nullcontext()
+
+
 @mcp.tool()
 def get_patient_history(patient_id: str) -> str:
     """Fetch the patient's medical history from Supabase given their patient_id.
     Returns the medical_history string, or a message if not found."""
     from mcp_tools.tools.database_tools import get_patient_history as _get
-    result = _get(patient_id)
+    with _tool_span("get_patient_history", {"patient_id": patient_id}):
+        result = _get(patient_id)
     return result or "No medical history on file."
 
 
@@ -50,7 +62,8 @@ def get_available_slots() -> str:
     """Get available appointment scheduling slots.
     Returns a comma-separated list of available time slots."""
     from mcp_tools.tools.database_tools import get_available_slots as _get
-    slots = _get()
+    with _tool_span("get_available_slots"):
+        slots = _get()
     return ", ".join(slots) if slots else "No slots available."
 
 
@@ -60,7 +73,8 @@ def search_hospital_policy(query: str) -> str:
     Input a query describing the policy to look up.
     Returns relevant policy snippets separated by ---."""
     from mcp_tools.tools.rag_tools import search_hospital_policy as _search
-    chunks = _search(query, top_k=3)
+    with _tool_span("search_hospital_policy", {"query": query[:200]}):
+        chunks = _search(query, top_k=3)
     return "\n---\n".join(chunks) if chunks else "No relevant policies found."
 
 
@@ -144,6 +158,13 @@ def _run_streamable_http() -> None:
 
 
 def main() -> None:
+    # OTel (Sprint 9, M4): idempotent, no-op unless OTEL_ENABLED. Service name
+    # comes from OTEL_SERVICE_NAME (Dockerfile.mcp/compose set "triageai-mcp").
+    try:
+        from telemetry import init_telemetry
+        init_telemetry()
+    except Exception:
+        pass
     try:
         from config import get_settings
         http_mode = get_settings().mcp_http_enabled

@@ -14,8 +14,14 @@ Usage:
     python scripts/run_eval.py                  # run all
     python scripts/run_eval.py --safety-only    # only safety (no LLM triage, faster)
     python scripts/run_eval.py --ids E01 FP02   # run specific messages
+    python scripts/run_eval.py --safety-only --gate   # CI mode: exit non-zero on breach
 
-Set LANGSMITH_TRACING=true in .env to trace all eval runs in LangSmith.
+Gate mode (Sprint 9, M4): --gate enforces the project's safety invariant with NO
+SaaS dependency (this is the CI deploy gate; scripts/run_langsmith_eval.py is the
+legacy LangSmith-hosted equivalent). Hard gate: safety recall must be 1.00 —
+a missed emergency always fails the build. --min-precision adds an optional
+soft floor. Any per-message error also fails the gate (an outage must not pass
+by vacuous metrics).
 """
 import json
 import os
@@ -177,6 +183,10 @@ def main():
     parser.add_argument("--ids", nargs="+", help="Run specific message IDs only")
     parser.add_argument("--dataset", default=DATASET_PATH, help="Path to dataset JSON")
     parser.add_argument("--limit", type=int, default=0, help="Max messages to run (0=all)")
+    parser.add_argument("--gate", action="store_true",
+                        help="CI gate: exit non-zero unless safety recall == 1.00 (and no run errors)")
+    parser.add_argument("--min-precision", type=float, default=0.0,
+                        help="Optional gate floor for safety precision (e.g. 0.85)")
     args = parser.parse_args()
 
     dataset = load_dataset(filter_ids=args.ids, dataset_path=args.dataset)
@@ -275,6 +285,36 @@ def main():
     with open(output_path, "w") as f:
         json.dump(output, f, indent=2)
     print(f"Results saved to {output_path}")
+
+    # --- CI gate (Sprint 9, M4) ---
+    if args.gate:
+        failures = []
+        n_emergencies = sm["tp"] + sm["fn"]
+        n_errors = sum(1 for r in results if r.get("error"))
+        if n_emergencies == 0:
+            failures.append("dataset contains no labeled emergencies — gate is vacuous")
+        if sm["fn"] > 0:
+            failures.append(
+                f"HARD GATE BREACH: safety recall {sm['recall']:.1%} < 100% "
+                f"({sm['fn']} emergency message(s) MISSED)"
+            )
+        if args.min_precision > 0 and sm["precision"] < args.min_precision:
+            failures.append(
+                f"precision {sm['precision']:.1%} below floor {args.min_precision:.1%}"
+            )
+        if n_errors > 0:
+            failures.append(f"{n_errors} message(s) errored during the run")
+
+        print(f"\n{'=' * 60}")
+        if failures:
+            print("GATE: FAILED")
+            for f_ in failures:
+                print(f"  ✗ {f_}")
+            print(f"{'=' * 60}\n")
+            sys.exit(1)
+        print(f"GATE: PASSED  (recall 100% on {n_emergencies} emergencies, "
+              f"precision {sm['precision']:.1%}, 0 run errors)")
+        print(f"{'=' * 60}\n")
 
 
 if __name__ == "__main__":

@@ -51,7 +51,7 @@ WORKDIR /home/user/app
 
 # Only what the tool server needs: the server package, the policy-agent module
 # it wraps, centralized settings, the seeding script, and the policy corpus.
-COPY --chown=user config.py .
+COPY --chown=user config.py telemetry.py ./
 COPY --chown=user mcp_tools/ mcp_tools/
 COPY --chown=user agents/__init__.py agents/policy_agent.py agents/
 COPY --chown=user schemas/ schemas/
