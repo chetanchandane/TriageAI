@@ -17,21 +17,11 @@ jobs:
       - run: python scripts/seed_policy.py
         env:
           LLM_GEMINI_API_KEY: ${{ secrets.LLM_GEMINI_API_KEY }}
-      - run: python scripts/run_eval.py --safety-only
+      # Sprint 10: gate logic moved into the harness itself (--gate exits
+      # non-zero on any missed emergency, run error, or vacuous dataset).
+      - run: python scripts/run_eval.py --safety-only --gate
         env:
           LLM_GEMINI_API_KEY: ${{ secrets.LLM_GEMINI_API_KEY }}
-      - name: Enforce zero false negatives
-        run: |
-          python - <<'EOF'
-          import json, sys
-          with open("tests/eval_results.json") as f:
-              data = json.load(f)
-          fn = data["safety_metrics"]["fn"]
-          if fn > 0:
-              print(f"FAIL: {fn} false negative(s) — emergencies missed.")
-              sys.exit(1)
-          print("PASS: safety recall 100%.")
-          EOF
       - uses: actions/upload-artifact@v4
         if: always()
         with:

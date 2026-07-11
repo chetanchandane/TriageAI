@@ -1,0 +1,104 @@
+# TriageAI CI (Sprint 10).
+#
+# Runs on every push/PR so Docker builds and service smoke tests happen on
+# GitHub runners — local machines never need to run docker compose to validate.
+#
+# Jobs:
+#   lint         — ruff, error-level rules only (syntax errors, undefined names)
+#   test         — hand-rolled unit runner (tests/test_tools.py), keyless/fail-open
+#   build-app    — root Dockerfile builds (includes policy-store bake)
+#   build-mcp    — Dockerfile.mcp builds, then LIVE smoke: /health returns the
+#                  tool list + seeded chunk count, and the MCP endpoint rejects
+#                  unauthenticated requests (401)
+#   safety-gate  — scripts/run_eval.py --safety-only --gate (the deploy gate:
+#                  recall must be 1.00). Skips with a warning if the
+#                  LLM_GEMINI_API_KEY secret isn't configured.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install ruff
+      - name: Ruff (error-level rules — see pyproject.toml)
+        run: ruff check .
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Seed policy store (local embedder, no LLM key)
+        run: python scripts/seed_policy.py
+      - name: Unit tests (fail-open paths run keyless)
+        run: python tests/test_tools.py
+
+  build-app:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build app image
+        run: docker build -t triageai-app:ci -f Dockerfile .
+
+  build-mcp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build MCP tool-server image
+        run: docker build -t triageai-mcp:ci -f Dockerfile.mcp .
+      - name: Smoke test — /health and bearer auth
+        run: |
+          docker run -d --rm -p 8000:8000 -e MCP_AUTH_TOKEN=ci-token --name mcp triageai-mcp:ci
+          # wait for the server
+          ok=0
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8000/health > health.json 2>/dev/null; then ok=1; break; fi
+            sleep 2
+          done
+          if [ "$ok" != "1" ]; then echo "::error::/health never came up"; docker logs mcp; exit 1; fi
+          cat health.json
+          grep -q 'triageai-tools' health.json || { echo "::error::unexpected /health body"; exit 1; }
+          grep -q '"status": *"ok"' health.json || { echo "::error::policy store not seeded in image"; exit 1; }
+          # MCP endpoint must reject requests without the bearer token
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:8000/mcp)
+          if [ "$code" != "401" ]; then echo "::error::expected 401 without token, got $code"; docker logs mcp; exit 1; fi
+          echo "MCP smoke test passed (health OK, auth enforced)"
+          docker stop mcp
+
+  safety-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Safety gate (recall must be 1.00 — SaaS-free)
+        env:
+          LLM_GEMINI_API_KEY: ${{ secrets.LLM_GEMINI_API_KEY }}
+        run: |
+          if [ -z "$LLM_GEMINI_API_KEY" ]; then
+            echo "::warning::LLM_GEMINI_API_KEY secret not set — safety gate SKIPPED"
+            exit 0
+          fi
+          python scripts/run_eval.py --safety-only --gate
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: safety-eval-${{ github.run_id }}
+          path: tests/eval_results.json
+          if-no-files-found: ignore

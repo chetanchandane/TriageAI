@@ -1,0 +1,26 @@
+# TriageAI project metadata + tooling config (Sprint 10).
+# Dependencies stay in requirements/ (images install slim subsets); this file
+# exists for ruff and future tooling, not for packaging.
+
+[project]
+name = "triageai"
+version = "0.9.0"
+description = "Agentic clinical-triage system (RIT capstone): LangGraph + Gemini + MCP + HITL"
+requires-python = ">=3.11"
+
+[tool.ruff]
+target-version = "py311"
+extend-exclude = [
+    "myenv.nosync",
+    "benchmark",
+    "outputs",
+    "report",
+    "instructions",
+    "data",
+]
+
+[tool.ruff.lint]
+# Start strict-on-what-matters, quiet-on-style: syntax errors, malformed
+# comparisons, and undefined names only. Style rules (E, F401, etc.) can be
+# enabled later once the codebase is formatted in one dedicated pass.
+select = ["E9", "F63", "F7", "F82"]
