@@ -19,9 +19,14 @@ data/vector_store/
 # Logs
 logs/
 
+# Benchmark harness outputs (Sprint 8) — task packages ARE committed, run outputs are not
+benchmark/results/
+benchmark/meta_eval/
+benchmark/
 # LangGraph SQLite checkpoint (local dev only — production uses PostgresSaver)
 data/checkpoints.db
 data/checkpoints.db-shm
 data/checkpoints.db-wal
 
 .DS_Store
+alphaeval.md

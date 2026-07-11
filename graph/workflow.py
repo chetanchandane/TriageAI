@@ -145,21 +145,53 @@ MCP_CONFIG_PATH = os.path.join(
 )
 
 
+def _remote_mcp_config() -> dict | None:
+    """Build a MultiServerMCPClient config for a networked MCP server, if configured.
+
+    Sprint 9 (deployment split): when MCP_SERVER_URL is set, the tool plane is a
+    standalone Streamable-HTTP service (see mcp_tools/mcp_server.py) instead of
+    stdio subprocesses. MCP_AUTH_TOKEN, when set, is sent as a bearer header.
+    Returns None when MCP_SERVER_URL is unset (local stdio path).
+    """
+    from config import get_settings
+
+    settings = get_settings()
+    url = (settings.mcp_server_url or "").strip()
+    if not url:
+        return None
+    # FastMCP mounts the protocol endpoint at /mcp; accept a bare host URL.
+    if not url.rstrip("/").endswith("/mcp"):
+        url = url.rstrip("/") + "/mcp"
+    server_cfg: dict[str, Any] = {"transport": "streamable_http", "url": url}
+    if settings.mcp_auth_token:
+        server_cfg["headers"] = {"Authorization": f"Bearer {settings.mcp_auth_token}"}
+    return {"triageai-tools": server_cfg}
+
+
 async def _init_mcp_tools() -> list:
-    """Discover MCP tools from all servers in mcp_config.json via MultiServerMCPClient.
+    """Discover MCP tools via MultiServerMCPClient.
 
-    Resolves relative paths (--data-dir, cwd) to absolute so subprocesses find
-    the right files regardless of the caller's working directory.
+    Two modes:
+      - MCP_SERVER_URL set → single networked Streamable-HTTP server (cloud path).
+      - otherwise → servers from mcp_config.json as stdio subprocesses (local path),
+        with relative paths (--data-dir, cwd) resolved to absolute so subprocesses
+        find the right files regardless of the caller's working directory.
+
     Caches the result so servers are only started once per process.
-
-    The client is stored in _mcp_client (module-level) to keep the stdio subprocess
-    connections alive for the lifetime of the process — GC'ing the client kills them.
+    The client is stored in _mcp_client (module-level) to keep the connections
+    alive for the lifetime of the process — GC'ing the client kills them.
     """
     global _mcp_client, _mcp_tools
     if _mcp_tools is not None:
         return _mcp_tools
 
     from langchain_mcp_adapters.client import MultiServerMCPClient
+
+    remote = _remote_mcp_config()
+    if remote is not None:
+        _mcp_client = MultiServerMCPClient(remote)
+        _mcp_tools = await _mcp_client.get_tools()
+        return _mcp_tools
 
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -294,7 +326,8 @@ def _compile_graph(all_tools, triage_node_fn):
 
     # --- Compile with persistence and HITL interrupt ---
     # Priority: PostgresSaver (DATABASE_URL set) → SqliteSaver (local dev) → MemorySaver (last resort)
-    _database_url = os.environ.get("DATABASE_URL", "")
+    from config import get_settings
+    _database_url = get_settings().database_url
     if _database_url:
         try:
             from langgraph.checkpoint.postgres import PostgresSaver
@@ -361,8 +394,9 @@ def build_graph():
     local-only graph using TRIAGE_TOOLS.
     """
     import warnings
+    from config import get_settings
 
-    if os.path.exists(MCP_CONFIG_PATH):
+    if get_settings().mcp_server_url or os.path.exists(MCP_CONFIG_PATH):
         try:
             return asyncio.run(build_graph_async())
         except Exception as e:
@@ -374,7 +408,7 @@ def build_graph():
             )
     else:
         warnings.warn(
-            f"MCP config not found at {MCP_CONFIG_PATH}. "
+            f"MCP config not found at {MCP_CONFIG_PATH} and MCP_SERVER_URL unset. "
             "Using local-only tools.",
             stacklevel=2,
         )
@@ -427,11 +461,10 @@ def _get_compiled():
 # ---------------------------------------------------------------------------
 
 def _tracing_enabled() -> bool:
-    """True when LangSmith tracing is configured, so online-eval hooks should run."""
-    truthy = {"1", "true", "yes", "on"}
-    tracing = (os.environ.get("LANGSMITH_TRACING") or os.environ.get("LANGCHAIN_TRACING_V2") or "").lower()
-    has_key = bool(os.environ.get("LANGSMITH_API_KEY") or os.environ.get("LANGCHAIN_API_KEY"))
-    return tracing in truthy and has_key
+    """True when LangSmith tracing is configured, so online-eval hooks should run.
+    Logic lives in config.Settings.tracing_enabled (Sprint 9, M3)."""
+    from config import get_settings
+    return get_settings().tracing_enabled
 
 
 def _log_staff_feedback(run_id: str, original_draft: str, edited_draft: str | None) -> None:
@@ -483,6 +516,10 @@ def run_triage_workflow(
     patient_id: str = "",
     patient_email: str = "",
     thread_id: str = "",
+    medical_history: str = "",
+    file_uri: str = "",
+    file_mime_type: str = "",
+    file_name: str = "",
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """
     Run the full agentic workflow with persistence and HITL support.
@@ -495,6 +532,13 @@ def run_triage_workflow(
 
     For NORMAL/HIGH/EMERGENCY urgency, the workflow pauses before communication_node.
     Staff should use resume_workflow() to continue after review.
+
+    Sprint 8 (benchmark harness): `medical_history` optionally seeds patient
+    history directly into state so eval/benchmark cases can carry context
+    without a Supabase record (production still fetches via the
+    get_patient_history tool). `file_uri`/`file_mime_type`/`file_name` expose
+    the same multimodal path stream_triage_workflow already supports. All new
+    args default to empty — existing callers are unaffected.
     """
     msg = (patient_message or "").strip()
 
@@ -518,6 +562,12 @@ def run_triage_workflow(
         "is_emergency": False,
         "staff_approved": False,
     }
+    if medical_history:
+        initial["medical_history"] = medical_history
+    if file_uri:
+        initial["file_uri"] = file_uri
+        initial["file_mime_type"] = file_mime_type or None
+        initial["file_name"] = file_name or None
 
     # Online evals: when LangSmith tracing is on, capture the root run_id of this
     # invocation so the HITL resume path can attach staff feedback to the exact run.

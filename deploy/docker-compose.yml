@@ -1,30 +1,59 @@
-# TriageAI deployment.
+# TriageAI deployment — two-service topology (Sprint 9), mirrors production.
 #
 # Quick start (run from the repo root):
 #   1. cp .env.example .env   # set at least LLM_GEMINI_API_KEY
 #   2. docker compose -f deploy/docker-compose.yml up --build
-#   3. open http://localhost:8501
+#   3. open http://localhost:8501          (app)
+#      open http://localhost:6006          (Phoenix traces, optional profile)
 #
-# Persistence: HITL checkpoints live in Supabase Postgres (set DATABASE_URL in
-# .env → PostgresSaver). Only the ChromaDB policy store needs a local volume.
-# If DATABASE_URL is unset the code falls back to SqliteSaver under data/, which
-# is ephemeral here — re-add a volume on /home/user/app/data if you run without
-# Postgres. The image runs as UID 1000 with WORKDIR /home/user/app.
+# Topology (same shape as AWS: App Runner ↔ Fargate MCP service):
+#   app  — Streamlit UI + LangGraph workflow. Talks to the MCP tool server over
+#          Streamable HTTP (MCP_SERVER_URL). If the MCP service is down, the app
+#          degrades to in-process tools — you can demo that by stopping `mcp`.
+#   mcp  — standalone FastMCP tool server (Dockerfile.mcp) with the ChromaDB
+#          policy store baked into the image.
+#   phoenix — optional OTel trace backend (profile "observability").
+#          Enable with: docker compose --profile observability up
+#
+# Persistence: HITL checkpoints live in Postgres (set DATABASE_URL in .env →
+# PostgresSaver). Without it the app falls back to SqliteSaver inside the
+# container, which is ephemeral here.
 services:
-  triageai:
+  app:
     build:
-      # Context is the repo root (one level up). The Dockerfile lives at the repo
-      # root (required by Hugging Face Spaces; shared by Render and Compose).
       context: ..
       dockerfile: Dockerfile
-    image: triageai:latest
+    image: triageai-app:latest
     ports:
       - "8501:8501"
     env_file:
       - ../.env
-    volumes:
-      - vector_store:/home/user/app/data/vector_store
+    environment:
+      MCP_SERVER_URL: http://mcp:8000/mcp
+      MCP_AUTH_TOKEN: ${MCP_AUTH_TOKEN:-dev-local-token}
+    depends_on:
+      - mcp
     restart: unless-stopped
 
-volumes:
-  vector_store:
+  mcp:
+    build:
+      context: ..
+      dockerfile: Dockerfile.mcp
+    image: triageai-mcp:latest
+    ports:
+      - "8000:8000"   # exposed for local curl/debugging; not required by app
+    env_file:
+      - ../.env
+    environment:
+      MCP_TRANSPORT: streamable-http
+      MCP_PORT: "8000"
+      MCP_AUTH_TOKEN: ${MCP_AUTH_TOKEN:-dev-local-token}
+    restart: unless-stopped
+
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    profiles: ["observability"]
+    ports:
+      - "6006:6006"   # UI + OTLP HTTP collector
+      - "4317:4317"   # OTLP gRPC
+    restart: unless-stopped

@@ -34,8 +34,10 @@ RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 WORKDIR /tmp/build
-COPY requirements.txt .
-RUN pip install -r requirements.txt
+# Sprint 9: images install the slim app set, not the dev aggregate
+# (requirements.txt now pulls in eval/benchmark tooling for local dev).
+COPY requirements/base.txt requirements/app.txt requirements/
+RUN pip install -r requirements/app.txt
 
 # ---------------------------------------------------------------------------
 # Stage 2: runtime — slim image, non-root UID 1000, venv + app (no compiler)

@@ -1,0 +1,11 @@
+# Standalone MCP tool server (Dockerfile.mcp).
+# Slim by design: only what mcp_tools/mcp_server.py + its tools import.
+# resend / google-genai / langgraph are NOT needed here — the tool server
+# exposes db + RAG lookups only; email and LLM calls live in the app.
+-r base.txt
+mcp>=1.9.0
+uvicorn>=0.30.0
+starlette>=0.37.0
+chromadb>=0.4.0
+supabase>=2.0.0
+pypdf>=4.0.0

@@ -1,0 +1,8 @@
+# Local development, tests, evals, benchmark harness. Not shipped in images.
+-r app.txt
+-r mcp.txt
+# Sprint 8: AlphaEval-style benchmark harness (task.yaml packages + generated attachments)
+pyyaml>=6.0
+reportlab>=4.0.0
+pillow>=10.0.0
+pytest>=8.0.0

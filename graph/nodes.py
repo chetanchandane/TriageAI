@@ -228,6 +228,13 @@ def _triage_agent_node_impl(state: TriageWorkflowState, tools=None) -> dict[str,
         safety = state.get("safety_result") or {}
 
         context_parts = [f"Patient ID: {patient_id}"]
+        # Sprint 8: benchmark/eval cases can seed history directly into state
+        # (no Supabase record exists for synthetic patients). Production never
+        # sets this field — history still arrives via the get_patient_history tool.
+        if state.get("medical_history"):
+            context_parts.append(
+                f"Patient history on file: {state['medical_history']}"
+            )
         if safety.get("is_potential_emergency"):
             context_parts.append(
                 f"SAFETY NOTE: This message was flagged by the safety screen. "

@@ -1,0 +1,70 @@
+# TriageAI — standalone MCP tool server (Sprint 9, deployment split)
+#
+# Runs mcp_tools/mcp_server.py over Streamable HTTP as its own service.
+# The app container connects via MCP_SERVER_URL (see graph/workflow.py).
+# Deliberately slim: no streamlit, no langgraph, no LLM SDKs — just the MCP
+# server, ChromaDB (policy RAG), and the Supabase client.
+#
+# The ChromaDB policy store is baked at build time (same decision as the app
+# image): the corpus is 8 static markdown docs, so a deterministic, offline-safe
+# store versioned with the code beats runtime seeding.
+
+# --- Stage 1: builder ---
+FROM python:3.11-slim AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+WORKDIR /tmp/build
+COPY requirements/base.txt requirements/mcp.txt requirements/
+RUN pip install -r requirements/mcp.txt
+
+# --- Stage 2: runtime ---
+FROM python:3.11-slim AS runtime
+
+# Shared libs for chromadb's compiled extensions (onnxruntime, hnswlib).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libgomp1 \
+        libstdc++6 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN useradd -m -u 1000 user
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    HOME=/home/user \
+    PATH="/opt/venv/bin:$PATH" \
+    MCP_TRANSPORT=streamable-http \
+    MCP_PORT=8000
+
+COPY --from=builder /opt/venv /opt/venv
+
+USER user
+WORKDIR /home/user/app
+
+# Only what the tool server needs: the server package, the policy-agent module
+# it wraps, centralized settings, the seeding script, and the policy corpus.
+COPY --chown=user config.py .
+COPY --chown=user mcp_tools/ mcp_tools/
+COPY --chown=user agents/__init__.py agents/policy_agent.py agents/
+COPY --chown=user schemas/ schemas/
+COPY --chown=user scripts/seed_policy.py scripts/
+COPY --chown=user data/policies/ data/policies/
+
+# Bake the policy store + ChromaDB's default ONNX embedder into the image.
+RUN python scripts/seed_policy.py --force \
+    && (find /home/user/.cache/chroma -name '*.tar.gz' -delete 2>/dev/null || true)
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD python -c "import os,urllib.request; urllib.request.urlopen('http://localhost:%s/health' % os.environ.get('MCP_PORT','8000'), timeout=4)" || exit 1
+
+CMD ["python", "-m", "mcp_tools.mcp_server"]

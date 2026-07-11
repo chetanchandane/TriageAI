@@ -540,3 +540,61 @@ LANGSMITH_PROJECT=TriageAI       # live project that online evals/feedback attac
 > penalize replies that reference real patient facts. Treat its online score as a
 > directional signal, not a hard gate; the offline `draft_faithful` (which has history)
 > remains authoritative.
+
+---
+
+## Production Benchmark — AlphaEval Methodology (Sprint 8)
+
+The offline and online suites above answer "did the pipeline regress?". The **production
+benchmark** answers the question AlphaEval (*Evaluating Agents in Production*,
+arXiv:2604.12162) argues research benchmarks never do: how much of the real professional
+work does the agent actually deliver, scored the way a domain expert would score it.
+
+### Structure
+
+Every eval case is a self-contained task package under `benchmark/tasks/<id>/`
+(`task.yaml` + `query.md` + optional `files/` + `.eval/ground_truth.json`). 218 tasks
+across 6 domains: emergency_detection (34), false_positive_discrimination (40),
+context_urgency (30), clinical_questions (51), medication_refills (20),
+scheduling_billing (40) — plus 3 of those are multimodal (lab-report PDF with a critical
+value, wound photo, insurance letter), exercising the portal's attachment path the
+text-only datasets never covered.
+
+### Scoring
+
+Each `task.yaml` declares a weighted mix of ≥2 evaluation paradigms (deterministic
+safety/urgency/intent checks + the Sprint 7 LLM-judge rubrics):
+`s_task = Σ w_k · e_k`, weights renormalized over evaluators that returned a score.
+Domain score = unweighted task mean; overall = unweighted mean across the 6 domains.
+The safety hard gate survives: a missed emergency fails the run regardless of aggregate.
+
+Each task also carries an `economic_value` block (role × minutes × loaded rate, expert
+`calibration_factor` per AlphaEval Appendix G), so runs report **dollars of triage labor
+delivered** (Σ value × s_task) alongside scores — the full set represents ≈ $2.3K of
+staff labor per pass at uncalibrated heuristic rates.
+
+### Judge validation (meta-evaluation)
+
+`scripts/meta_eval.py` closes the loop the LLM judges were missing: sample ~20 scored
+tasks (`--make-sheet`), have two independent annotators (one briefed strict, one lenient)
+mark each rubric point 0/1, then `--compute` reports Cohen's κ (each pair) and Fleiss' κ
+(three-way). AlphaEval's reference band is κ 0.69–0.78; ≥0.61 (substantial) is the bar
+before trusting the judges at scale.
+
+### How to run
+
+```bash
+python scripts/build_benchmark_tasks.py --multimodal   # build packages (idempotent)
+python scripts/estimate_economic_value.py              # annotate $ value (--llm to refine)
+python scripts/run_benchmark.py --dry-run              # validate packages, free
+python scripts/run_benchmark.py --limit 20             # scored run (live Gemini)
+python scripts/run_benchmark.py                        # full 218-task pass
+python scripts/meta_eval.py --make-sheet benchmark/results/run_<ts>.json
+python scripts/meta_eval.py --compute benchmark/meta_eval/annotation_sheet.csv
+```
+
+Known deviations from production, by design: benchmark patients have no Supabase record,
+so task `patient_history` is seeded directly into workflow state
+(`run_triage_workflow(..., medical_history=)`) rather than fetched by the
+`get_patient_history` tool; checklist interrupts are auto-answered once with a neutral
+"no additional information" so single-shot scoring can proceed.

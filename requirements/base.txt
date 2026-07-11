@@ -1,0 +1,7 @@
+# Shared by every image/environment.
+python-dotenv>=1.0.0
+# Sprint 4: no <2.10 pin — chroma-mcp-server requires pydantic>=2.10
+pydantic>=2.0.0
+# Sprint 9 (M3): centralized typed settings (config.py). config.py degrades to a
+# plain os.environ shim if this is missing — never a hard startup dependency.
+pydantic-settings>=2.0.0
